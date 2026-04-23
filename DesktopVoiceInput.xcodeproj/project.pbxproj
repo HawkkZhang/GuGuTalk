@@ -1,0 +1,453 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		300000000000000000000001 /* DesktopVoiceInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000001 /* DesktopVoiceInput.swift */; };
+		300000000000000000000002 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000002 /* AppDelegate.swift */; };
+		300000000000000000000003 /* VoiceInputAppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000003 /* VoiceInputAppModel.swift */; };
+		300000000000000000000004 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000004 /* AppSettings.swift */; };
+		300000000000000000000005 /* PermissionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000005 /* PermissionState.swift */; };
+		300000000000000000000006 /* PreviewState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000006 /* PreviewState.swift */; };
+		300000000000000000000007 /* RecognitionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000007 /* RecognitionModels.swift */; };
+		300000000000000000000008 /* AudioCaptureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000008 /* AudioCaptureEngine.swift */; };
+		300000000000000000000009 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000009 /* HotkeyManager.swift */; };
+		30000000000000000000000A /* PermissionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000000A /* PermissionCoordinator.swift */; };
+		30000000000000000000000B /* PreviewOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000000B /* PreviewOverlayController.swift */; };
+		30000000000000000000000C /* RecognitionOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000000C /* RecognitionOrchestrator.swift */; };
+		30000000000000000000000D /* TextInsertionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000000D /* TextInsertionService.swift */; };
+		30000000000000000000000E /* TranscriptPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000000E /* TranscriptPostProcessor.swift */; };
+		30000000000000000000000F /* DoubaoSpeechProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000000F /* DoubaoSpeechProvider.swift */; };
+		300000000000000000000010 /* LocalSpeechProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000010 /* LocalSpeechProvider.swift */; };
+		300000000000000000000011 /* ProviderFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000011 /* ProviderFactory.swift */; };
+		300000000000000000000012 /* QwenSpeechProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000012 /* QwenSpeechProvider.swift */; };
+		300000000000000000000013 /* SpeechProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000013 /* SpeechProvider.swift */; };
+		300000000000000000000014 /* MenuBarContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000014 /* MenuBarContentView.swift */; };
+		300000000000000000000015 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000015 /* SettingsView.swift */; };
+		300000000000000000000016 /* AppPermissionKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000016 /* AppPermissionKind.swift */; };
+		300000000000000000000017 /* PermissionGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000017 /* PermissionGuideView.swift */; };
+		300000000000000000000018 /* RealtimeWebSocketTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000018 /* RealtimeWebSocketTransport.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		10000000000000000000000D /* DesktopVoiceInput.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DesktopVoiceInput.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		100000000000000000000011 /* DesktopVoiceInput-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "DesktopVoiceInput-Info.plist"; sourceTree = "<group>"; };
+		200000000000000000000001 /* DesktopVoiceInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopVoiceInput.swift; sourceTree = "<group>"; };
+		200000000000000000000002 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		200000000000000000000003 /* VoiceInputAppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceInputAppModel.swift; sourceTree = "<group>"; };
+		200000000000000000000004 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
+		200000000000000000000005 /* PermissionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionState.swift; sourceTree = "<group>"; };
+		200000000000000000000006 /* PreviewState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewState.swift; sourceTree = "<group>"; };
+		200000000000000000000007 /* RecognitionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecognitionModels.swift; sourceTree = "<group>"; };
+		200000000000000000000008 /* AudioCaptureEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCaptureEngine.swift; sourceTree = "<group>"; };
+		200000000000000000000009 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
+		20000000000000000000000A /* PermissionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionCoordinator.swift; sourceTree = "<group>"; };
+		20000000000000000000000B /* PreviewOverlayController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewOverlayController.swift; sourceTree = "<group>"; };
+		20000000000000000000000C /* RecognitionOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecognitionOrchestrator.swift; sourceTree = "<group>"; };
+		20000000000000000000000D /* TextInsertionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInsertionService.swift; sourceTree = "<group>"; };
+		20000000000000000000000E /* TranscriptPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptPostProcessor.swift; sourceTree = "<group>"; };
+		20000000000000000000000F /* DoubaoSpeechProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoubaoSpeechProvider.swift; sourceTree = "<group>"; };
+		200000000000000000000010 /* LocalSpeechProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalSpeechProvider.swift; sourceTree = "<group>"; };
+		200000000000000000000011 /* ProviderFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderFactory.swift; sourceTree = "<group>"; };
+		200000000000000000000012 /* QwenSpeechProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenSpeechProvider.swift; sourceTree = "<group>"; };
+		200000000000000000000013 /* SpeechProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechProvider.swift; sourceTree = "<group>"; };
+		200000000000000000000014 /* MenuBarContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarContentView.swift; sourceTree = "<group>"; };
+		200000000000000000000015 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		200000000000000000000016 /* AppPermissionKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPermissionKind.swift; sourceTree = "<group>"; };
+		200000000000000000000017 /* PermissionGuideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionGuideView.swift; sourceTree = "<group>"; };
+		200000000000000000000018 /* RealtimeWebSocketTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealtimeWebSocketTransport.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		10000000000000000000000F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		100000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000003 /* DesktopVoiceInput */,
+				100000000000000000000004 /* Config */,
+				100000000000000000000002 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		100000000000000000000002 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				10000000000000000000000D /* DesktopVoiceInput.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		100000000000000000000003 /* DesktopVoiceInput */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000001 /* DesktopVoiceInput.swift */,
+				100000000000000000000005 /* App */,
+				100000000000000000000006 /* Models */,
+				100000000000000000000007 /* Services */,
+				100000000000000000000009 /* Views */,
+			);
+			path = Sources/DesktopVoiceInput;
+			sourceTree = "<group>";
+		};
+		100000000000000000000004 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000011 /* DesktopVoiceInput-Info.plist */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		100000000000000000000005 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000002 /* AppDelegate.swift */,
+				200000000000000000000003 /* VoiceInputAppModel.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		100000000000000000000006 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000016 /* AppPermissionKind.swift */,
+				200000000000000000000004 /* AppSettings.swift */,
+				200000000000000000000005 /* PermissionState.swift */,
+				200000000000000000000006 /* PreviewState.swift */,
+				200000000000000000000007 /* RecognitionModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		100000000000000000000007 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000008 /* AudioCaptureEngine.swift */,
+				200000000000000000000009 /* HotkeyManager.swift */,
+				20000000000000000000000A /* PermissionCoordinator.swift */,
+				20000000000000000000000B /* PreviewOverlayController.swift */,
+				100000000000000000000008 /* Providers */,
+				20000000000000000000000C /* RecognitionOrchestrator.swift */,
+				20000000000000000000000D /* TextInsertionService.swift */,
+				20000000000000000000000E /* TranscriptPostProcessor.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		100000000000000000000008 /* Providers */ = {
+			isa = PBXGroup;
+			children = (
+				20000000000000000000000F /* DoubaoSpeechProvider.swift */,
+				200000000000000000000010 /* LocalSpeechProvider.swift */,
+				200000000000000000000011 /* ProviderFactory.swift */,
+				200000000000000000000012 /* QwenSpeechProvider.swift */,
+				200000000000000000000018 /* RealtimeWebSocketTransport.swift */,
+				200000000000000000000013 /* SpeechProvider.swift */,
+			);
+			path = Providers;
+			sourceTree = "<group>";
+		};
+		100000000000000000000009 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000014 /* MenuBarContentView.swift */,
+				200000000000000000000017 /* PermissionGuideView.swift */,
+				200000000000000000000015 /* SettingsView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		10000000000000000000000A /* DesktopVoiceInput */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 10000000000000000000000C /* Build configuration list for PBXNativeTarget "DesktopVoiceInput" */;
+			buildPhases = (
+				10000000000000000000000E /* Sources */,
+				10000000000000000000000F /* Frameworks */,
+				100000000000000000000010 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = DesktopVoiceInput;
+			productName = DesktopVoiceInput;
+			productReference = 10000000000000000000000D /* DesktopVoiceInput.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		100000000000000000000000 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 2640;
+				LastUpgradeCheck = 2640;
+				TargetAttributes = {
+					10000000000000000000000A = {
+						CreatedOnToolsVersion = 26.4.1;
+					};
+				};
+			};
+			buildConfigurationList = 10000000000000000000000B /* Build configuration list for PBXProject "DesktopVoiceInput" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 100000000000000000000001;
+			productRefGroup = 100000000000000000000002 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				10000000000000000000000A /* DesktopVoiceInput */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		100000000000000000000010 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		10000000000000000000000E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				300000000000000000000001 /* DesktopVoiceInput.swift in Sources */,
+				300000000000000000000002 /* AppDelegate.swift in Sources */,
+				300000000000000000000003 /* VoiceInputAppModel.swift in Sources */,
+				300000000000000000000004 /* AppSettings.swift in Sources */,
+				300000000000000000000005 /* PermissionState.swift in Sources */,
+				300000000000000000000006 /* PreviewState.swift in Sources */,
+				300000000000000000000007 /* RecognitionModels.swift in Sources */,
+				300000000000000000000008 /* AudioCaptureEngine.swift in Sources */,
+				300000000000000000000009 /* HotkeyManager.swift in Sources */,
+				30000000000000000000000A /* PermissionCoordinator.swift in Sources */,
+				30000000000000000000000B /* PreviewOverlayController.swift in Sources */,
+				30000000000000000000000C /* RecognitionOrchestrator.swift in Sources */,
+				30000000000000000000000D /* TextInsertionService.swift in Sources */,
+				30000000000000000000000E /* TranscriptPostProcessor.swift in Sources */,
+				30000000000000000000000F /* DoubaoSpeechProvider.swift in Sources */,
+				300000000000000000000010 /* LocalSpeechProvider.swift in Sources */,
+				300000000000000000000011 /* ProviderFactory.swift in Sources */,
+				300000000000000000000012 /* QwenSpeechProvider.swift in Sources */,
+				300000000000000000000013 /* SpeechProvider.swift in Sources */,
+				300000000000000000000014 /* MenuBarContentView.swift in Sources */,
+				300000000000000000000015 /* SettingsView.swift in Sources */,
+				300000000000000000000016 /* AppPermissionKind.swift in Sources */,
+				300000000000000000000017 /* PermissionGuideView.swift in Sources */,
+				300000000000000000000018 /* RealtimeWebSocketTransport.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		400000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "-";
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_LANGUAGE = en;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Config/DesktopVoiceInput-Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.end.DesktopVoiceInput;
+				PRODUCT_MODULE_NAME = DesktopVoiceInput;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		400000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "-";
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_LANGUAGE = en;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Config/DesktopVoiceInput-Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.end.DesktopVoiceInput;
+				PRODUCT_MODULE_NAME = DesktopVoiceInput;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		400000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+			};
+			name = Debug;
+		};
+		400000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		10000000000000000000000B /* Build configuration list for PBXProject "DesktopVoiceInput" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				400000000000000000000003 /* Debug */,
+				400000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		10000000000000000000000C /* Build configuration list for PBXNativeTarget "DesktopVoiceInput" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				400000000000000000000001 /* Debug */,
+				400000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 100000000000000000000000 /* Project object */;
+}

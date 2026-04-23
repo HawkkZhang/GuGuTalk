@@ -1,0 +1,219 @@
+import AppKit
+import Combine
+import Foundation
+
+@MainActor
+final class VoiceInputAppModel: ObservableObject {
+    private enum ActiveTriggerKind {
+        case holdToTalk
+        case toggleToTalk
+    }
+
+    var settings: AppSettings
+    let permissionCoordinator: PermissionCoordinator
+    let previewState: PreviewState
+    let overlayController: PreviewOverlayController
+    let orchestrator: RecognitionOrchestrator
+    let hotkeyManager: HotkeyManager
+
+    @Published private(set) var lastInsertionResult: InsertionResult?
+    @Published private(set) var lastErrorMessage: String?
+
+    private var cancellables = Set<AnyCancellable>()
+    private var activeTriggerKind: ActiveTriggerKind?
+
+    init() {
+        let settings = AppSettings()
+        let permissionCoordinator = PermissionCoordinator()
+        let previewState = PreviewState()
+        let overlayController = PreviewOverlayController(previewState: previewState)
+        let providerFactory = ProviderFactory(settings: settings)
+        let postProcessor = TranscriptPostProcessor()
+        let textInsertionService = TextInsertionService()
+        let audioCaptureEngine = AudioCaptureEngine()
+        let orchestrator = RecognitionOrchestrator(
+            settings: settings,
+            permissionCoordinator: permissionCoordinator,
+            previewState: previewState,
+            audioCaptureEngine: audioCaptureEngine,
+            providerFactory: providerFactory,
+            postProcessor: postProcessor,
+            textInsertionService: textInsertionService
+        )
+
+        self.settings = settings
+        self.permissionCoordinator = permissionCoordinator
+        self.previewState = previewState
+        self.overlayController = overlayController
+        self.orchestrator = orchestrator
+        self.hotkeyManager = HotkeyManager(settings: settings)
+
+        bind()
+
+        Task {
+            await permissionCoordinator.refreshAll(promptForSystemDialogs: false)
+            hotkeyManager.start()
+        }
+    }
+
+    private func bind() {
+        previewState.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+
+        permissionCoordinator.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+
+        settings.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+
+        hotkeyManager.onHoldPress = { [weak self] in
+            guard let self else { return }
+            Task { await self.beginCaptureUsingHoldHotkey() }
+        }
+
+        hotkeyManager.onHoldRelease = { [weak self] in
+            guard let self else { return }
+            Task { await self.endCaptureUsingHoldHotkey() }
+        }
+
+        hotkeyManager.onTogglePress = { [weak self] in
+            guard let self else { return }
+            Task { await self.toggleCaptureUsingToggleHotkey() }
+        }
+
+        Publishers.CombineLatest(settings.$holdToTalkHotkey, settings.$toggleToTalkHotkey)
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.hotkeyManager.reloadConfiguration()
+            }
+            .store(in: &cancellables)
+
+        orchestrator.$lastInsertionResult
+            .receive(on: RunLoop.main)
+            .assign(to: &$lastInsertionResult)
+
+        orchestrator.$lastErrorMessage
+            .receive(on: RunLoop.main)
+            .assign(to: &$lastErrorMessage)
+
+        orchestrator.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+
+        orchestrator.$isSessionRunning
+            .dropFirst()
+            .sink { [weak self] isRunning in
+                guard let self else { return }
+                if !isRunning {
+                    self.activeTriggerKind = nil
+                }
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                Task { await self.permissionCoordinator.refreshAll(promptForSystemDialogs: false) }
+            }
+            .store(in: &cancellables)
+    }
+
+    func openSystemSettings() {
+        NSApp.activate(ignoringOtherApps: true)
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy") else {
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
+    func openSystemSettings(for permission: AppPermissionKind) {
+        NSApp.activate(ignoringOtherApps: true)
+        guard let url = URL(string: permission.settingsURLString) else {
+            openSystemSettings()
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
+    func requestPermissions() {
+        NSApp.activate(ignoringOtherApps: true)
+
+        Task {
+            await permissionCoordinator.requestMissingPermissions(for: settings.preferredMode)
+            await permissionCoordinator.refreshAll(promptForSystemDialogs: false)
+        }
+    }
+
+    var missingPermissions: [AppPermissionKind] {
+        permissionCoordinator.missingPermissions(for: settings.preferredMode)
+    }
+
+    var hasMissingPermissions: Bool {
+        !missingPermissions.isEmpty
+    }
+
+    func actionLabel(for permission: AppPermissionKind) -> String {
+        let state = permissionCoordinator.state(for: permission)
+        if permission.canPromptInApp && state == .notDetermined {
+            return "立即申请"
+        }
+        return "前往设置"
+    }
+
+    func handlePermissionAction(_ permission: AppPermissionKind) {
+        let state = permissionCoordinator.state(for: permission)
+        if permission.canPromptInApp && state == .notDetermined {
+            requestPermissions()
+        } else {
+            openSystemSettings(for: permission)
+        }
+    }
+
+    func quit() {
+        NSApp.terminate(nil)
+    }
+
+    func suspendHotkeys() {
+        hotkeyManager.suspend()
+    }
+
+    func resumeHotkeys() {
+        hotkeyManager.resume()
+    }
+
+    private func beginCaptureUsingHoldHotkey() async {
+        guard activeTriggerKind == nil, !orchestrator.isSessionRunning else { return }
+        activeTriggerKind = .holdToTalk
+        await orchestrator.beginCapture()
+        if !orchestrator.isSessionRunning {
+            activeTriggerKind = nil
+        }
+    }
+
+    private func endCaptureUsingHoldHotkey() async {
+        guard activeTriggerKind == .holdToTalk else { return }
+        await orchestrator.endCapture()
+    }
+
+    private func toggleCaptureUsingToggleHotkey() async {
+        if activeTriggerKind == .toggleToTalk || (activeTriggerKind == nil && orchestrator.isSessionRunning) {
+            activeTriggerKind = .toggleToTalk
+            await orchestrator.endCapture()
+            return
+        }
+
+        guard activeTriggerKind == nil, !orchestrator.isSessionRunning else { return }
+        activeTriggerKind = .toggleToTalk
+        await orchestrator.beginCapture()
+        if !orchestrator.isSessionRunning {
+            activeTriggerKind = nil
+        }
+    }
+}
