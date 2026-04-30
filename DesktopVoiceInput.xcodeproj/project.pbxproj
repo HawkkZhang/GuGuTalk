@@ -31,6 +31,7 @@
 		300000000000000000000016 /* AppPermissionKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000016 /* AppPermissionKind.swift */; };
 		300000000000000000000017 /* PermissionGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000017 /* PermissionGuideView.swift */; };
 		300000000000000000000018 /* RealtimeWebSocketTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000018 /* RealtimeWebSocketTransport.swift */; };
+		300000000000000000000019 /* DVITheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000019 /* DVITheme.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -60,6 +61,7 @@
 		200000000000000000000016 /* AppPermissionKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPermissionKind.swift; sourceTree = "<group>"; };
 		200000000000000000000017 /* PermissionGuideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionGuideView.swift; sourceTree = "<group>"; };
 		200000000000000000000018 /* RealtimeWebSocketTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealtimeWebSocketTransport.swift; sourceTree = "<group>"; };
+		200000000000000000000019 /* DVITheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DVITheme.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -162,6 +164,7 @@
 		100000000000000000000009 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				200000000000000000000019 /* DVITheme.swift */,
 				200000000000000000000014 /* MenuBarContentView.swift */,
 				200000000000000000000017 /* PermissionGuideView.swift */,
 				200000000000000000000015 /* SettingsView.swift */,
@@ -260,6 +263,7 @@
 				300000000000000000000016 /* AppPermissionKind.swift in Sources */,
 				300000000000000000000017 /* PermissionGuideView.swift in Sources */,
 				300000000000000000000018 /* RealtimeWebSocketTransport.swift in Sources */,
+				300000000000000000000019 /* DVITheme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

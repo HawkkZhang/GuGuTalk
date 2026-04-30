@@ -1,192 +1,378 @@
+import AppKit
 import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var appModel: VoiceInputAppModel
+    @State private var selectedTab: SettingsTab = .general
+    @State private var selectedCloudService: CloudServiceTab = .doubao
     @State private var holdHotkeyFeedback: HotkeyValidationIssue?
     @State private var toggleHotkeyFeedback: HotkeyValidationIssue?
 
-    private let primaryText = Color(red: 0.10, green: 0.14, blue: 0.20)
-    private let secondaryText = Color(red: 0.36, green: 0.41, blue: 0.49)
+    private let ready = DVITheme.ready
+    private let caution = DVITheme.caution
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                header
-                PermissionGuideView(appModel: appModel, compact: false)
-                generalSection
-                permissionsSection
-                doubaoSection
-                qwenSection
+        VStack(spacing: 0) {
+            header
+
+            TabView(selection: $selectedTab) {
+                generalPage
+                    .tabItem { Label("常用", systemImage: "slider.horizontal.3") }
+                    .tag(SettingsTab.general)
+
+                servicesPage
+                    .tabItem { Label("服务", systemImage: "cloud") }
+                    .tag(SettingsTab.services)
+
+                permissionsPage
+                    .tabItem { Label("权限", systemImage: "lock.shield") }
+                    .tag(SettingsTab.permissions)
             }
-            .padding(24)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
         }
-        .background(
-            LinearGradient(
-                colors: [Color(red: 0.98, green: 0.99, blue: 1.0), Color(red: 0.94, green: 0.96, blue: 0.99)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-        )
-        .foregroundStyle(primaryText)
+        .background(DVITheme.window.ignoresSafeArea())
+        .foregroundStyle(DVITheme.ink)
+        .tint(DVITheme.accent)
+        .environment(\.controlActiveState, .active)
+        .onAppear {
+            bringSettingsWindowForward()
+        }
+        .onChange(of: appModel.settings.preferredMode) { _, mode in
+            if let service = CloudServiceTab(mode: mode) {
+                selectedCloudService = service
+            }
+        }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("桌面语音输入")
-                .font(.system(size: 30, weight: .bold, design: .rounded))
-                .foregroundStyle(primaryText)
-            Text("菜单栏常驻，支持“按住说话”和“按一下开始、再按一下结束”两种触发方式。")
-                .font(.system(size: 14))
-                .foregroundStyle(secondaryText)
+        HStack(alignment: .center, spacing: 12) {
+            Text("设置")
+                .font(.system(size: 22, weight: .semibold))
+
+            Spacer()
+
+            Text(appModel.hasMissingPermissions ? "需要权限" : appModel.settings.preferredMode.title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(appModel.hasMissingPermissions ? caution : ready)
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 22)
+        .padding(.bottom, 12)
+    }
+
+    private var generalPage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                SettingsGroup(title: "语音输入") {
+                    settingsRow(label: "识别模式") {
+                        Picker("识别模式", selection: $appModel.settings.preferredMode) {
+                            ForEach(RecognitionMode.userSelectableModes) { mode in
+                                Text(mode.title).tag(mode)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .tint(DVITheme.accent)
+                        .frame(width: 220)
+                    }
+
+                    if appModel.settings.preferredMode != .local {
+                        Divider()
+                        providerStatus(mode: appModel.settings.preferredMode, isConfigured: isCurrentProviderConfigured)
+                    }
+                }
+
+                SettingsGroup(title: "快捷键") {
+                    hotkeyRecorderSection(
+                        slot: .holdToTalk,
+                        hotkey: $appModel.settings.holdToTalkHotkey,
+                        isEnabled: $appModel.settings.holdToTalkEnabled,
+                        feedback: $holdHotkeyFeedback,
+                        accent: DVITheme.accent
+                    )
+
+                    Divider()
+
+                    hotkeyRecorderSection(
+                        slot: .toggleToTalk,
+                        hotkey: $appModel.settings.toggleToTalkHotkey,
+                        isEnabled: $appModel.settings.toggleToTalkEnabled,
+                        feedback: $toggleHotkeyFeedback,
+                        accent: DVITheme.accent
+                    )
+                }
+
+                SettingsGroup(title: "外观") {
+                    settingsRow(label: "显示方式") {
+                        Picker("外观", selection: $appModel.settings.appearancePreference) {
+                            ForEach(AppearancePreference.allCases) { appearance in
+                                Text(appearance.title).tag(appearance)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .tint(DVITheme.accent)
+                        .frame(width: 220)
+                    }
+                }
+            }
+            .padding(.vertical, 12)
         }
     }
 
-    private var generalSection: some View {
-        SettingsCard(title: "通用设置", subtitle: "优先保证低延迟与可日用的中文语音输入体验。") {
-            Picker("识别模式", selection: $appModel.settings.preferredMode) {
-                ForEach(RecognitionMode.allCases) { mode in
-                    Text(mode.title).tag(mode)
+    private var servicesPage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                SettingsGroup(title: "云端参数") {
+                    settingsRow(label: "服务") {
+                        Picker("云端服务", selection: $selectedCloudService) {
+                            ForEach(CloudServiceTab.allCases) { service in
+                                Text(service.title).tag(service)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .tint(DVITheme.accent)
+                        .frame(width: 180)
+                    }
+
+                    Divider()
+
+                    switch selectedCloudService {
+                    case .doubao:
+                        providerStatus(mode: .doubao, isConfigured: appModel.settings.recognitionConfig.doubaoCredentials.isConfigured)
+                        providerField(label: "App ID", text: $appModel.settings.doubaoAppID, secure: false)
+                        providerField(label: "Access Token", text: $appModel.settings.doubaoAccessKey, secure: true)
+                        providerField(label: "Resource ID", text: $appModel.settings.doubaoResourceID, secure: false)
+                        providerField(label: "Endpoint", text: $appModel.settings.doubaoEndpoint, secure: false)
+                    case .qwen:
+                        providerStatus(mode: .qwen, isConfigured: appModel.settings.recognitionConfig.qwenCredentials.isConfigured)
+                        providerField(label: "API Key", text: $appModel.settings.qwenAPIKey, secure: true)
+                        providerField(label: "Model", text: $appModel.settings.qwenModel, secure: false)
+                        providerField(label: "Endpoint", text: $appModel.settings.qwenEndpoint, secure: false)
+                    }
                 }
             }
+            .padding(.vertical, 12)
+        }
+    }
 
-            hotkeyRecorderSection(
-                slot: .holdToTalk,
-                hotkey: $appModel.settings.holdToTalkHotkey,
-                feedback: $holdHotkeyFeedback
-            )
+    private var permissionsPage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if appModel.hasMissingPermissions {
+                    PermissionGuideView(appModel: appModel, compact: false)
+                }
 
-            hotkeyRecorderSection(
-                slot: .toggleToTalk,
-                hotkey: $appModel.settings.toggleToTalkHotkey,
-                feedback: $toggleHotkeyFeedback
-            )
+                SettingsGroup(title: "权限状态") {
+                    permissionRow(permission: .microphone, state: appModel.permissionCoordinator.microphone)
+                    permissionRow(permission: .speechRecognition, state: appModel.permissionCoordinator.speechRecognition)
+                    permissionRow(permission: .accessibility, state: appModel.permissionCoordinator.accessibility)
+                    permissionRow(permission: .inputMonitoring, state: appModel.permissionCoordinator.inputMonitoring)
 
-            HStack {
-                Text("后处理")
-                    .foregroundStyle(primaryText)
-                Spacer()
-                Text("自动标点 + 中文断句")
-                    .foregroundStyle(secondaryText)
+                    HStack(spacing: 10) {
+                        if appModel.hasMissingPermissions {
+                            Button("请求缺失权限") {
+                                appModel.requestPermissions()
+                            }
+                            .buttonStyle(.borderedProminent)
+                        } else {
+                            Button("刷新状态") {
+                                Task {
+                                    await appModel.permissionCoordinator.refreshAll(promptForSystemDialogs: false)
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                        }
+
+                        Button("打开系统设置") {
+                            appModel.openSystemSettings()
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    .padding(.top, 4)
+                }
             }
-
-            HStack {
-                Text("流式插入")
-                    .foregroundStyle(primaryText)
-                Spacer()
-                Text("先预览，结束后一次性插入")
-                    .foregroundStyle(secondaryText)
-            }
+            .padding(.vertical, 12)
         }
     }
 
     private func hotkeyRecorderSection(
         slot: HotkeySlot,
         hotkey: Binding<HotkeyConfiguration>,
-        feedback: Binding<HotkeyValidationIssue?>
+        isEnabled: Binding<Bool>,
+        feedback: Binding<HotkeyValidationIssue?>,
+        accent: Color
     ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(slot.title)
-                .foregroundStyle(primaryText)
-
-            Text(slot.subtitle)
-                .font(.system(size: 12))
-                .foregroundStyle(secondaryText)
-
-            HotkeyRecorderButton(
-                appModel: appModel,
-                hotkey: hotkey,
-                feedback: feedback,
-                validation: { candidate in
-                    appModel.settings.validationIssue(for: slot, candidate: candidate)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(slot.title)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(isEnabled.wrappedValue ? DVITheme.ink : DVITheme.secondaryInk)
                 }
-            )
 
-            let issue = feedback.wrappedValue ?? appModel.settings.validationIssue(for: slot, candidate: hotkey.wrappedValue)
-            if let issue {
-                Text(issue.message)
-                    .font(.system(size: 12))
-                    .foregroundStyle(issue.severity == .error ? Color.red : Color.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
-                Text("冲突处理：大多数应用级快捷键我们会优先截住；系统保留组合和更高优先级的系统行为仍然不能强抢。")
-                    .font(.system(size: 12))
-                    .foregroundStyle(secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+
+                Toggle("", isOn: isEnabled)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .tint(accent)
+
+                HotkeyRecorderButton(
+                    appModel: appModel,
+                    hotkey: hotkey,
+                    feedback: feedback,
+                    validation: { candidate in
+                        appModel.settings.validationIssue(for: slot, candidate: candidate)
+                    },
+                    accent: accent
+                )
+                .disabled(!isEnabled.wrappedValue)
+                .opacity(isEnabled.wrappedValue ? 1 : 0.48)
             }
         }
+        .padding(.vertical, 2)
     }
 
-    private var permissionsSection: some View {
-        SettingsCard(title: "权限状态", subtitle: "缺哪项就处理哪项。应用回到前台时也会自动刷新当前权限状态。") {
-            permissionRow(permission: .microphone, state: appModel.permissionCoordinator.microphone)
-            permissionRow(permission: .speechRecognition, state: appModel.permissionCoordinator.speechRecognition)
-            permissionRow(permission: .accessibility, state: appModel.permissionCoordinator.accessibility)
-            permissionRow(permission: .inputMonitoring, state: appModel.permissionCoordinator.inputMonitoring)
+    private func providerField(label: String, text: Binding<String>, secure: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(DVITheme.secondaryInk)
 
-            HStack(spacing: 12) {
-                Button("请求缺失权限") {
-                    appModel.requestPermissions()
-                }
-
-                Button("打开系统设置") {
-                    appModel.openSystemSettings()
+            Group {
+                if secure {
+                    SecureField(label, text: text)
+                } else {
+                    TextField(label, text: text)
                 }
             }
+            .textFieldStyle(.roundedBorder)
+            .font(.system(size: 13, weight: .regular, design: .monospaced))
         }
     }
 
-    private var doubaoSection: some View {
-        SettingsCard(title: "豆包语音识别", subtitle: "按官方更推荐的“双向流式优化版”接入，接口地址应为 `wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async`。") {
-            TextField("App ID", text: $appModel.settings.doubaoAppID)
-                .textFieldStyle(.roundedBorder)
-            SecureField("Access Token", text: $appModel.settings.doubaoAccessKey)
-                .textFieldStyle(.roundedBorder)
-            TextField("Resource ID", text: $appModel.settings.doubaoResourceID)
-                .textFieldStyle(.roundedBorder)
-            TextField("Endpoint", text: $appModel.settings.doubaoEndpoint)
-                .textFieldStyle(.roundedBorder)
+    private func settingsRow<Content: View>(
+        label: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(label)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(DVITheme.ink)
+
+            Spacer()
+
+            content()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var qwenSection: some View {
-        SettingsCard(title: "千问语音识别", subtitle: "按 DashScope Realtime 事件流接入，统一走 session.update / append / finish。") {
-            SecureField("API Key", text: $appModel.settings.qwenAPIKey)
-                .textFieldStyle(.roundedBorder)
-            TextField("Model", text: $appModel.settings.qwenModel)
-                .textFieldStyle(.roundedBorder)
-            TextField("Endpoint", text: $appModel.settings.qwenEndpoint)
-                .textFieldStyle(.roundedBorder)
+    private func providerStatus(mode: RecognitionMode, isConfigured: Bool) -> some View {
+        HStack(spacing: 8) {
+            let isActive = appModel.settings.preferredMode == mode
+            Image(systemName: isConfigured ? "checkmark" : "exclamationmark.triangle.fill")
+                .foregroundStyle(isConfigured ? ready : caution)
+            Text(isActive ? "当前使用" : (isConfigured ? "已配置" : "未配置"))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(isActive ? DVITheme.accent : DVITheme.secondaryInk)
+        }
+        .padding(.bottom, 2)
+    }
+
+    private var isCurrentProviderConfigured: Bool {
+        switch appModel.settings.preferredMode {
+        case .doubao:
+            appModel.settings.recognitionConfig.doubaoCredentials.isConfigured
+        case .qwen:
+            appModel.settings.recognitionConfig.qwenCredentials.isConfigured
+        case .auto, .local:
+            true
         }
     }
 
     private func permissionRow(permission: AppPermissionKind, state: PermissionState) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: state.isUsable ? "checkmark" : "exclamationmark.triangle.fill")
+                .foregroundStyle(state.isUsable ? ready : caution)
+                .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
                 Text(permission.title)
-                    .foregroundStyle(primaryText)
-                Spacer()
-                Text(state.title)
-                    .foregroundStyle(state.isUsable ? .green : .orange)
+                    .font(.system(size: 13, weight: .medium))
+                if !state.isUsable {
+                    Text(permission.guidance)
+                        .font(.system(size: 12))
+                        .foregroundStyle(DVITheme.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
-            Text(permission.guidance)
-                .font(.system(size: 12))
-                .foregroundStyle(secondaryText)
+            Spacer()
 
-            if !state.isUsable {
-                HStack {
-                    Button(appModel.actionLabel(for: permission)) {
-                        appModel.handlePermissionAction(permission)
-                    }
-                    .buttonStyle(.bordered)
-
-                    Spacer()
+            if state.isUsable {
+                Text(state.title)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(DVITheme.secondaryInk)
+            } else {
+                Button(appModel.actionLabel(for: permission)) {
+                    appModel.handlePermissionAction(permission)
                 }
+                .buttonStyle(.bordered)
             }
         }
         .padding(.vertical, 4)
+    }
+
+    private func bringSettingsWindowForward() {
+        activateSettingsWindow()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            activateSettingsWindow()
+        }
+    }
+
+    private func activateSettingsWindow() {
+        NSApp.activate(ignoringOtherApps: true)
+
+        for window in NSApp.windows where !(window is NSPanel) {
+            window.makeKeyAndOrderFront(nil)
+            window.orderFrontRegardless()
+        }
+    }
+}
+
+private enum SettingsTab {
+    case general
+    case services
+    case permissions
+}
+
+private enum CloudServiceTab: CaseIterable, Identifiable {
+    case doubao
+    case qwen
+
+    init?(mode: RecognitionMode) {
+        switch mode {
+        case .doubao:
+            self = .doubao
+        case .qwen:
+            self = .qwen
+        case .auto, .local:
+            return nil
+        }
+    }
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .doubao:
+            "豆包"
+        case .qwen:
+            "千问"
+        }
     }
 }
 
@@ -195,28 +381,43 @@ private struct HotkeyRecorderButton: View {
     @Binding var hotkey: HotkeyConfiguration
     @Binding var feedback: HotkeyValidationIssue?
     let validation: (HotkeyConfiguration) -> HotkeyValidationIssue?
+    let accent: Color
 
     @State private var isRecording = false
     @State private var monitor: Any?
     @State private var livePreview = "等待按键"
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
-                Button(isRecording ? "停止录制" : "录制快捷键") {
-                    isRecording ? stopRecording() : startRecording()
+        HStack(spacing: 8) {
+            Text(isRecording ? livePreview : hotkey.displayName)
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .foregroundStyle(isRecording ? accent : DVITheme.ink)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .frame(minWidth: 88)
+                .background(isRecording ? DVITheme.stateFill(accent, emphasized: true) : DVITheme.control, in: DVITheme.controlShape())
+                .overlay(
+                    DVITheme.controlShape()
+                        .stroke(isRecording ? DVITheme.stateStroke(accent, emphasized: true) : DVITheme.separator.opacity(0.42), lineWidth: 1)
+                )
+
+            if isRecording {
+                Button {
+                    stopRecording()
+                } label: {
+                    Label("停止", systemImage: "stop.fill")
                 }
                 .buttonStyle(.borderedProminent)
-
-                Text("当前：\(hotkey.displayName)")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+            } else {
+                Button {
+                    startRecording()
+                } label: {
+                    Label("录制", systemImage: "keyboard")
+                }
+                .buttonStyle(.bordered)
             }
-
-            Text(isRecording ? "录制中：\(livePreview)" : "支持单键或组合键，按 Esc 取消。")
-                .font(.system(size: 12))
-                .foregroundStyle(isRecording ? Color.accentColor : .secondary)
         }
+        .animation(.easeOut(duration: 0.16), value: isRecording)
         .onDisappear {
             stopRecording()
         }
@@ -224,7 +425,7 @@ private struct HotkeyRecorderButton: View {
 
     private func startRecording() {
         feedback = nil
-        livePreview = "等待按键"
+        livePreview = "按键中"
         isRecording = true
         appModel.suspendHotkeys()
         NSApp.activate(ignoringOtherApps: true)
@@ -266,38 +467,37 @@ private struct HotkeyRecorderButton: View {
     }
 }
 
-private struct SettingsCard<Content: View>: View {
+private struct SettingsGroup<Content: View>: View {
     let title: String
-    let subtitle: String
+    let subtitle: String?
     let content: Content
 
-    init(title: String, subtitle: String, @ViewBuilder content: () -> Content) {
+    init(title: String, subtitle: String? = nil, @ViewBuilder content: () -> Content) {
         self.title = title
         self.subtitle = subtitle
         self.content = content()
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.10, green: 0.14, blue: 0.20))
-                Text(subtitle)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color(red: 0.36, green: 0.41, blue: 0.49))
+                    .font(.system(size: 16, weight: .semibold))
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 12))
+                        .foregroundStyle(DVITheme.secondaryInk)
+                }
             }
 
             content
-                .foregroundStyle(Color(red: 0.10, green: 0.14, blue: 0.20))
         }
-        .padding(20)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(DVITheme.panel, in: DVITheme.panelShape())
         .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.white.opacity(0.7), lineWidth: 1)
+            DVITheme.panelShape()
+                .stroke(DVITheme.separator.opacity(0.42), lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.06), radius: 18, x: 0, y: 8)
     }
 }

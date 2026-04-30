@@ -18,6 +18,7 @@ final class VoiceInputAppModel: ObservableObject {
 
     @Published private(set) var lastInsertionResult: InsertionResult?
     @Published private(set) var lastErrorMessage: String?
+    @Published private(set) var appearanceRevision = UUID()
 
     private var cancellables = Set<AnyCancellable>()
     private var activeTriggerKind: ActiveTriggerKind?
@@ -26,7 +27,7 @@ final class VoiceInputAppModel: ObservableObject {
         let settings = AppSettings()
         let permissionCoordinator = PermissionCoordinator()
         let previewState = PreviewState()
-        let overlayController = PreviewOverlayController(previewState: previewState)
+        let overlayController = PreviewOverlayController(previewState: previewState, settings: settings)
         let providerFactory = ProviderFactory(settings: settings)
         let postProcessor = TranscriptPostProcessor()
         let textInsertionService = TextInsertionService()
@@ -49,6 +50,7 @@ final class VoiceInputAppModel: ObservableObject {
         self.hotkeyManager = HotkeyManager(settings: settings)
 
         bind()
+        applyAppearance(settings.appearancePreference)
 
         Task {
             await permissionCoordinator.refreshAll(promptForSystemDialogs: false)
@@ -70,6 +72,22 @@ final class VoiceInputAppModel: ObservableObject {
         settings.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+
+        settings.$appearancePreference
+            .receive(on: RunLoop.main)
+            .sink { [weak self] preference in
+                self?.applyAppearance(preference)
+            }
+            .store(in: &cancellables)
+
+        DistributedNotificationCenter.default()
+            .publisher(for: Notification.Name("AppleInterfaceThemeChangedNotification"))
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.applyAppearance(self.settings.appearancePreference)
+            }
             .store(in: &cancellables)
 
         hotkeyManager.onHoldPress = { [weak self] in
@@ -186,6 +204,16 @@ final class VoiceInputAppModel: ObservableObject {
 
     func resumeHotkeys() {
         hotkeyManager.resume()
+    }
+
+    private func applyAppearance(_ preference: AppearancePreference) {
+        NSApp.appearance = preference.nsAppearance
+        for window in NSApp.windows {
+            window.appearance = preference.nsAppearance
+            window.contentView?.appearance = preference.nsAppearance
+            window.contentView?.needsDisplay = true
+        }
+        appearanceRevision = UUID()
     }
 
     private func beginCaptureUsingHoldHotkey() async {

@@ -1,46 +1,58 @@
+import AppKit
 import SwiftUI
 
 struct PermissionGuideView: View {
     @ObservedObject var appModel: VoiceInputAppModel
     let compact: Bool
 
-    private let primaryText = Color(red: 0.10, green: 0.14, blue: 0.20)
-    private let secondaryText = Color(red: 0.36, green: 0.41, blue: 0.49)
+    private let primaryText = DVITheme.ink
+    private let secondaryText = DVITheme.secondaryInk
+    private let steel = DVITheme.tertiaryInk
+    private let ready = DVITheme.ready
+    private let caution = DVITheme.caution
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: appModel.hasMissingPermissions ? "hand.raised.fill" : "checkmark.shield.fill")
-                    .font(.system(size: compact ? 18 : 22, weight: .semibold))
-                    .foregroundStyle(appModel.hasMissingPermissions ? .orange : .green)
+        VStack(alignment: .leading, spacing: compact ? 12 : 14) {
+            HStack(alignment: .top, spacing: 10) {
+                ZStack {
+                    DVITheme.controlShape()
+                        .fill(DVITheme.stateFill(appModel.hasMissingPermissions ? caution : ready, emphasized: true))
+                    Image(systemName: appModel.hasMissingPermissions ? "hand.raised.fill" : "checkmark")
+                        .font(.system(size: compact ? 16 : 18, weight: .semibold))
+                        .foregroundStyle(appModel.hasMissingPermissions ? caution : ready)
+                }
+                .frame(width: compact ? 34 : 38, height: compact ? 34 : 38)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(appModel.hasMissingPermissions ? "还差几项权限才能正常工作" : "权限已经准备好了")
-                        .font(.system(size: compact ? 14 : 18, weight: .semibold))
+                        .font(.system(size: compact ? 13 : 15, weight: .semibold))
                         .foregroundStyle(primaryText)
                     Text(appModel.hasMissingPermissions
-                         ? "建议按顺序把下面几项补齐。只有缺失时才会去申请或引导跳转。"
-                         : "现在可以尝试按住快捷键说话，看看能不能顺利出字。")
+                         ? "补齐缺失项后即可使用语音输入。"
+                         : "现在可以使用快捷键开始输入。")
                         .font(.system(size: compact ? 12 : 13))
                         .foregroundStyle(secondaryText)
                 }
             }
 
             if appModel.hasMissingPermissions {
-                ForEach(AppPermissionKind.allCases) { permission in
+                ForEach(missingPermissions) { permission in
                     permissionRow(permission)
                 }
             }
         }
-        .padding(compact ? 14 : 18)
-        .background(
-            appModel.hasMissingPermissions ? Color.orange.opacity(0.08) : Color.green.opacity(0.08),
-            in: RoundedRectangle(cornerRadius: compact ? 16 : 20, style: .continuous)
-        )
+        .padding(compact ? 12 : 14)
+        .background(DVITheme.panel, in: DVITheme.panelShape())
         .overlay(
-            RoundedRectangle(cornerRadius: compact ? 16 : 20, style: .continuous)
-                .stroke(appModel.hasMissingPermissions ? Color.orange.opacity(0.25) : Color.green.opacity(0.25), lineWidth: 1)
+            DVITheme.panelShape()
+                .stroke(DVITheme.separator.opacity(0.45), lineWidth: 1)
         )
+    }
+
+    private var missingPermissions: [AppPermissionKind] {
+        AppPermissionKind.allCases.filter { permission in
+            !appModel.permissionCoordinator.state(for: permission).isUsable
+        }
     }
 
     private func permissionRow(_ permission: AppPermissionKind) -> some View {
@@ -53,11 +65,11 @@ struct PermissionGuideView: View {
                         .font(.system(size: compact ? 13 : 14, weight: .medium))
                         .foregroundStyle(primaryText)
                     Text(state.title)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(primaryText)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(steel)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(state.isUsable ? Color.green.opacity(0.14) : Color.orange.opacity(0.14), in: Capsule())
+                        .background(DVITheme.stateFill(state.isUsable ? ready : caution), in: DVITheme.controlShape())
                 }
 
                 Text(permission.guidance)
@@ -72,8 +84,7 @@ struct PermissionGuideView: View {
                 Button(appModel.actionLabel(for: permission)) {
                     appModel.handlePermissionAction(permission)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(compact ? .small : .regular)
+                .buttonStyle(.bordered)
             }
         }
         .padding(.vertical, compact ? 2 : 4)

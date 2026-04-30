@@ -24,13 +24,13 @@ enum AppPermissionKind: String, CaseIterable, Identifiable {
     var guidance: String {
         switch self {
         case .microphone:
-            "用来采集你说话的声音。不授权就无法录音。"
+            "采集说话声音。未授权时无法录音。"
         case .speechRecognition:
-            "本地识别依赖它把语音转成文字。云端模式可作为兜底。"
+            "用于本地语音转文字。云端模式可作为兜底。"
         case .accessibility:
-            "用来把识别结果写回当前输入框。不授权就只能看到预览，不能自动出字。"
+            "把识别结果写回当前输入框。未授权时只能预览。"
         case .inputMonitoring:
-            "用来监听全局按住说话快捷键。不授权时热键可能不生效。"
+            "监听全局快捷键。未授权时快捷键可能不生效。"
         }
     }
 

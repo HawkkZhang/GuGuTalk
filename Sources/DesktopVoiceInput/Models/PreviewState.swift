@@ -10,7 +10,7 @@ final class PreviewState: ObservableObject {
     @Published var errorMessage: String?
     @Published var audioLevel: Float = 0
     @Published var isRecording = false
-    @Published var activeMode: RecognitionMode = .auto
+    @Published var activeMode: RecognitionMode = .local
 
     var menuBarSymbolName: String {
         if errorMessage != nil {
@@ -27,6 +27,6 @@ final class PreviewState: ObservableObject {
         errorMessage = nil
         audioLevel = 0
         isRecording = false
-        activeMode = .auto
+        activeMode = .local
     }
 }

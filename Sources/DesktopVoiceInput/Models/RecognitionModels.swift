@@ -8,18 +8,20 @@ enum RecognitionMode: String, CaseIterable, Codable, Identifiable {
     case doubao
     case qwen
 
+    static let userSelectableModes: [RecognitionMode] = [.local, .doubao, .qwen]
+
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .auto:
-            "本地优先"
+            "自动"
         case .local:
-            "仅本地"
+            "本地"
         case .doubao:
-            "豆包优先"
+            "豆包"
         case .qwen:
-            "千问优先"
+            "千问"
         }
     }
 }

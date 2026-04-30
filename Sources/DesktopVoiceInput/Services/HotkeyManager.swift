@@ -82,10 +82,10 @@ final class HotkeyManager {
         let holdHotkey = settings.holdToTalkHotkey
         let toggleHotkey = settings.toggleToTalkHotkey
 
-        let matchesHoldKeyCode = keyCode == holdHotkey.keyCode
-        let matchesHoldModifiers = flags == holdHotkey.modifiers
-        let matchesToggleKeyCode = keyCode == toggleHotkey.keyCode
-        let matchesToggleModifiers = flags == toggleHotkey.modifiers
+        let matchesHoldKeyCode = settings.holdToTalkEnabled && keyCode == holdHotkey.keyCode
+        let matchesHoldModifiers = settings.holdToTalkEnabled && flags == holdHotkey.modifiers
+        let matchesToggleKeyCode = settings.toggleToTalkEnabled && keyCode == toggleHotkey.keyCode
+        let matchesToggleModifiers = settings.toggleToTalkEnabled && flags == toggleHotkey.modifiers
 
         switch type {
         case .keyDown:
@@ -122,7 +122,7 @@ final class HotkeyManager {
 
             return shouldSuppress
         case .flagsChanged:
-            if toggleHotkey.keyCode == 63 {
+            if settings.toggleToTalkEnabled, toggleHotkey.keyCode == 63 {
                 if flags.contains(.function), !isTogglePressed {
                     isTogglePressed = true
                     onTogglePress?()
@@ -133,7 +133,7 @@ final class HotkeyManager {
                 }
             }
 
-            if holdHotkey.keyCode == 63 {
+            if settings.holdToTalkEnabled, holdHotkey.keyCode == 63 {
                 if flags.contains(.function), !isHoldPressed {
                     isHoldPressed = true
                     onHoldPress?()

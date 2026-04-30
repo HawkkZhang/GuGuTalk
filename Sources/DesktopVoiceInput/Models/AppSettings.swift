@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import SwiftUI
 
 @MainActor
 final class AppSettings: ObservableObject {
@@ -11,8 +12,10 @@ final class AppSettings: ObservableObject {
         static let hotkeyModifiers = "hotkeyModifiers"
         static let holdToTalkHotkeyKeyCode = "holdToTalkHotkeyKeyCode"
         static let holdToTalkHotkeyModifiers = "holdToTalkHotkeyModifiers"
+        static let holdToTalkEnabled = "holdToTalkEnabled"
         static let toggleToTalkHotkeyKeyCode = "toggleToTalkHotkeyKeyCode"
         static let toggleToTalkHotkeyModifiers = "toggleToTalkHotkeyModifiers"
+        static let toggleToTalkEnabled = "toggleToTalkEnabled"
         static let doubaoAppID = "doubaoAppID"
         static let doubaoAccessKey = "doubaoAccessKey"
         static let doubaoResourceID = "doubaoResourceID"
@@ -22,6 +25,7 @@ final class AppSettings: ObservableObject {
         static let qwenAPIKey = "qwenAPIKey"
         static let qwenModel = "qwenModel"
         static let qwenEndpoint = "qwenEndpoint"
+        static let appearancePreference = "appearancePreference"
     }
 
     @Published var preferredMode: RecognitionMode {
@@ -37,11 +41,19 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    @Published var holdToTalkEnabled: Bool {
+        didSet { defaults.set(holdToTalkEnabled, forKey: Keys.holdToTalkEnabled) }
+    }
+
     @Published var toggleToTalkHotkey: HotkeyConfiguration {
         didSet {
             defaults.set(Int(toggleToTalkHotkey.keyCode), forKey: Keys.toggleToTalkHotkeyKeyCode)
             defaults.set(Int(toggleToTalkHotkey.modifiers.rawValue), forKey: Keys.toggleToTalkHotkeyModifiers)
         }
+    }
+
+    @Published var toggleToTalkEnabled: Bool {
+        didSet { defaults.set(toggleToTalkEnabled, forKey: Keys.toggleToTalkEnabled) }
     }
 
     @Published var doubaoAppID: String {
@@ -72,11 +84,16 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(qwenEndpoint, forKey: Keys.qwenEndpoint) }
     }
 
+    @Published var appearancePreference: AppearancePreference {
+        didSet { defaults.set(appearancePreference.rawValue, forKey: Keys.appearancePreference) }
+    }
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        self.preferredMode = RecognitionMode(rawValue: defaults.string(forKey: Keys.preferredMode) ?? "") ?? .auto
+        let storedMode = RecognitionMode(rawValue: defaults.string(forKey: Keys.preferredMode) ?? "") ?? .local
+        self.preferredMode = storedMode == .auto ? .local : storedMode
         if defaults.object(forKey: Keys.holdToTalkHotkeyKeyCode) != nil {
             let keyCode = UInt16(defaults.integer(forKey: Keys.holdToTalkHotkeyKeyCode))
             let modifiers = NSEvent.ModifierFlags(rawValue: UInt(defaults.integer(forKey: Keys.holdToTalkHotkeyModifiers)))
@@ -89,6 +106,9 @@ final class AppSettings: ObservableObject {
             let legacyPreset = HotkeyPreset(rawValue: defaults.string(forKey: Keys.hotkeyPreset) ?? "") ?? .optionSpace
             self.holdToTalkHotkey = legacyPreset.configuration
         }
+        self.holdToTalkEnabled = defaults.object(forKey: Keys.holdToTalkEnabled) == nil
+            ? true
+            : defaults.bool(forKey: Keys.holdToTalkEnabled)
         if defaults.object(forKey: Keys.toggleToTalkHotkeyKeyCode) != nil {
             let keyCode = UInt16(defaults.integer(forKey: Keys.toggleToTalkHotkeyKeyCode))
             let modifiers = NSEvent.ModifierFlags(rawValue: UInt(defaults.integer(forKey: Keys.toggleToTalkHotkeyModifiers)))
@@ -96,6 +116,9 @@ final class AppSettings: ObservableObject {
         } else {
             self.toggleToTalkHotkey = HotkeyConfiguration.make(keyCode: 36, modifiers: [.option])
         }
+        self.toggleToTalkEnabled = defaults.object(forKey: Keys.toggleToTalkEnabled) == nil
+            ? true
+            : defaults.bool(forKey: Keys.toggleToTalkEnabled)
         self.doubaoAppID = defaults.string(forKey: Keys.doubaoAppID) ?? ""
         self.doubaoAccessKey = defaults.string(forKey: Keys.doubaoAccessKey) ?? defaults.string(forKey: Keys.legacyDoubaoToken) ?? ""
         let storedDoubaoResourceID = defaults.string(forKey: Keys.doubaoResourceID) ?? defaults.string(forKey: Keys.legacyDoubaoCluster) ?? "volc.bigasr.sauc.duration"
@@ -108,6 +131,7 @@ final class AppSettings: ObservableObject {
         let storedQwenModel = defaults.string(forKey: Keys.qwenModel) ?? "qwen3-asr-flash-realtime"
         self.qwenModel = storedQwenModel == "qwen3-asr-flash" ? "qwen3-asr-flash-realtime" : storedQwenModel
         self.qwenEndpoint = defaults.string(forKey: Keys.qwenEndpoint) ?? "wss://dashscope.aliyuncs.com/api-ws/v1/realtime"
+        self.appearancePreference = AppearancePreference(rawValue: defaults.string(forKey: Keys.appearancePreference) ?? "") ?? .system
     }
 
     var recognitionConfig: RecognitionConfig {
@@ -138,6 +162,55 @@ final class AppSettings: ObservableObject {
         }
 
         return candidate.validationIssue
+    }
+}
+
+enum AppearancePreference: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .system:
+            "跟随系统"
+        case .light:
+            "浅色"
+        case .dark:
+            "深色"
+        }
+    }
+
+    @MainActor
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system:
+            Self.currentSystemColorScheme
+        case .light:
+            .light
+        case .dark:
+            .dark
+        }
+    }
+
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .system:
+            nil
+        case .light:
+            NSAppearance(named: .aqua)
+        case .dark:
+            NSAppearance(named: .darkAqua)
+        }
+    }
+
+    @MainActor
+    static var currentSystemColorScheme: ColorScheme {
+        let appearance = NSApp.effectiveAppearance
+        let match = appearance.bestMatch(from: [.aqua, .darkAqua])
+        return match == .darkAqua ? .dark : .light
     }
 }
 

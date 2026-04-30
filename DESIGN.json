@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-04-29T00:00:00+08:00",
+  "title": "Design System: Desktop Voice Input",
+  "extensions": {
+    "northStar": "Quiet Mac Companion",
+    "theme": {
+      "default": "system",
+      "manualOptions": ["light", "dark"],
+      "principle": "Follow macOS appearance by default and allow explicit override."
+    },
+    "motion": {
+      "durationFast": "150ms",
+      "durationNormal": "220ms",
+      "easing": "ease-out",
+      "principle": "State feedback only, no decorative choreography."
+    },
+    "rules": [
+      "Use native macOS controls before custom controls.",
+      "Use color for state and action only.",
+      "Keep cloud provider settings collapsed until needed.",
+      "Use system font everywhere; reserve monospaced style for shortcuts and credentials."
+    ]
+  }
+}
