@@ -4,7 +4,10 @@
 
 - DesktopVoiceInput is a macOS menu bar voice input app prototype.
 - Local Apple Speech, Qwen realtime, and Doubao realtime integrations have all been implemented.
-- The project now has a git snapshot on branch `codex/archive-current-state` at commit `84db14e`.
+- The current stable checkpoint is tag `stable-2026-05-01`, commit `960f2b3`.
+- GitHub repository: `https://github.com/HawkkZhang/GuGuSpeak`.
+- Local development branch is currently `codex/archive-current-state`, tracking `origin/main`.
+- Product name under consideration: `GuGuSpeak`.
 
 ## Not Yet Fully Implemented
 
