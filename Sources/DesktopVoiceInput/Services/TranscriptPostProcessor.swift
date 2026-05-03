@@ -8,10 +8,6 @@ struct TranscriptPostProcessor {
         value = collapseWhitespace(in: value)
         value = normalizeChineseSpacing(in: value)
 
-        if needsTerminalPunctuation(value) {
-            value.append("。")
-        }
-
         return value
     }
 
@@ -26,10 +22,5 @@ struct TranscriptPostProcessor {
             .replacingOccurrences(of: " ？", with: "？")
             .replacingOccurrences(of: " ！", with: "！")
             .replacingOccurrences(of: " ：", with: "：")
-    }
-
-    private func needsTerminalPunctuation(_ text: String) -> Bool {
-        guard let last = text.last else { return false }
-        return !"。！？!?…".contains(last)
     }
 }

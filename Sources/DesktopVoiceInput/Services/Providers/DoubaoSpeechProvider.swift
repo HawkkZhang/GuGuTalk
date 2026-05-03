@@ -114,7 +114,8 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
                 showSpeechRate: false,
                 showVolume: false,
                 enableLID: false,
-                enableEmotionDetection: false
+                enableEmotionDetection: false,
+                hotWordList: nil
             )
         )
 
@@ -239,11 +240,13 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
         }
 
         let incomingSegment = extractCurrentSegment(from: sanitizedIncoming)
+        Self.logger.debug("updatePreview: committed=[\(self.committedTranscript, privacy: .public)] active=[\(self.activeSegmentTranscript, privacy: .public)] incoming=[\(sanitizedIncoming, privacy: .public)] extracted=[\(incomingSegment, privacy: .public)] segFinal=\(isSegmentFinal)")
         activeSegmentTranscript = reconcilePreview(existing: activeSegmentTranscript, incoming: incomingSegment)
 
         if isSegmentFinal {
             committedTranscript = mergeOverlappingText(base: committedTranscript, incoming: activeSegmentTranscript)
             activeSegmentTranscript = ""
+            Self.logger.debug("Segment committed: [\(self.committedTranscript, privacy: .public)]")
             return committedTranscript
         }
 
@@ -495,6 +498,16 @@ private struct DoubaoFullClientRequest: Encodable {
     }
 
     struct RequestPayload: Encodable {
+        struct HotWordItem: Encodable {
+            let hotWord: String
+            let weight: Int
+
+            enum CodingKeys: String, CodingKey {
+                case hotWord = "hot_word"
+                case weight
+            }
+        }
+
         let modelName: String
         let enableNonstream: Bool
         let showUtterances: Bool
@@ -506,6 +519,7 @@ private struct DoubaoFullClientRequest: Encodable {
         let showVolume: Bool
         let enableLID: Bool
         let enableEmotionDetection: Bool
+        let hotWordList: [HotWordItem]?
 
         enum CodingKeys: String, CodingKey {
             case modelName = "model_name"
@@ -519,6 +533,7 @@ private struct DoubaoFullClientRequest: Encodable {
             case showVolume = "show_volume"
             case enableLID = "enable_lid"
             case enableEmotionDetection = "enable_emotion_detection"
+            case hotWordList = "hot_word_list"
         }
     }
 

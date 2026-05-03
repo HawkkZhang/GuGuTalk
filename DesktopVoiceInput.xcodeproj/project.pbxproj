@@ -32,6 +32,11 @@
 		300000000000000000000017 /* PermissionGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000017 /* PermissionGuideView.swift */; };
 		300000000000000000000018 /* RealtimeWebSocketTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000018 /* RealtimeWebSocketTransport.swift */; };
 		300000000000000000000019 /* DVITheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000019 /* DVITheme.swift */; };
+		30000000000000000000001A /* PostProcessingConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000001A /* PostProcessingConfig.swift */; };
+		30000000000000000000001B /* LLMProviderConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000001B /* LLMProviderConfig.swift */; };
+		30000000000000000000001C /* LLMClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000001C /* LLMClient.swift */; };
+		30000000000000000000001D /* SmartPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000001D /* SmartPostProcessor.swift */; };
+		30000000000000000000001E /* HotwordStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000001E /* HotwordStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -62,6 +67,11 @@
 		200000000000000000000017 /* PermissionGuideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionGuideView.swift; sourceTree = "<group>"; };
 		200000000000000000000018 /* RealtimeWebSocketTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealtimeWebSocketTransport.swift; sourceTree = "<group>"; };
 		200000000000000000000019 /* DVITheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DVITheme.swift; sourceTree = "<group>"; };
+		20000000000000000000001A /* PostProcessingConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostProcessingConfig.swift; sourceTree = "<group>"; };
+		20000000000000000000001B /* LLMProviderConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProviderConfig.swift; sourceTree = "<group>"; };
+		20000000000000000000001C /* LLMClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMClient.swift; sourceTree = "<group>"; };
+		20000000000000000000001D /* SmartPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartPostProcessor.swift; sourceTree = "<group>"; };
+		20000000000000000000001E /* HotwordStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotwordStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -126,7 +136,10 @@
 			children = (
 				200000000000000000000016 /* AppPermissionKind.swift */,
 				200000000000000000000004 /* AppSettings.swift */,
+				20000000000000000000001E /* HotwordStore.swift */,
+				20000000000000000000001B /* LLMProviderConfig.swift */,
 				200000000000000000000005 /* PermissionState.swift */,
+				20000000000000000000001A /* PostProcessingConfig.swift */,
 				200000000000000000000006 /* PreviewState.swift */,
 				200000000000000000000007 /* RecognitionModels.swift */,
 			);
@@ -138,10 +151,12 @@
 			children = (
 				200000000000000000000008 /* AudioCaptureEngine.swift */,
 				200000000000000000000009 /* HotkeyManager.swift */,
+				20000000000000000000001C /* LLMClient.swift */,
 				20000000000000000000000A /* PermissionCoordinator.swift */,
 				20000000000000000000000B /* PreviewOverlayController.swift */,
 				100000000000000000000008 /* Providers */,
 				20000000000000000000000C /* RecognitionOrchestrator.swift */,
+				20000000000000000000001D /* SmartPostProcessor.swift */,
 				20000000000000000000000D /* TextInsertionService.swift */,
 				20000000000000000000000E /* TranscriptPostProcessor.swift */,
 			);
@@ -264,6 +279,11 @@
 				300000000000000000000017 /* PermissionGuideView.swift in Sources */,
 				300000000000000000000018 /* RealtimeWebSocketTransport.swift in Sources */,
 				300000000000000000000019 /* DVITheme.swift in Sources */,
+				30000000000000000000001A /* PostProcessingConfig.swift in Sources */,
+				30000000000000000000001B /* LLMProviderConfig.swift in Sources */,
+				30000000000000000000001C /* LLMClient.swift in Sources */,
+				30000000000000000000001D /* SmartPostProcessor.swift in Sources */,
+				30000000000000000000001E /* HotwordStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

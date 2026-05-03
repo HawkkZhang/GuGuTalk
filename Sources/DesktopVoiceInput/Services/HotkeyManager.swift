@@ -14,6 +14,7 @@ final class HotkeyManager {
     private var isHoldPressed = false
     private var isTogglePressed = false
     private var isSuspended = false
+    private var isSessionActive = false
 
     init(settings: AppSettings) {
         self.settings = settings
@@ -22,7 +23,7 @@ final class HotkeyManager {
     func start() {
         stop()
 
-        let mask = CGEventMask((1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue) | (1 << CGEventType.flagsChanged.rawValue))
+        let mask = CGEventMask((1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue) | (1 << CGEventType.flagsChanged.rawValue) | (1 << CGEventType.tapDisabledByTimeout.rawValue) | (1 << CGEventType.tapDisabledByUserInput.rawValue))
         let unmanagedSelf = Unmanaged.passUnretained(self)
         eventTap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
@@ -32,6 +33,12 @@ final class HotkeyManager {
             callback: { _, type, event, refcon in
                 guard let refcon else { return Unmanaged.passUnretained(event) }
                 let manager = Unmanaged<HotkeyManager>.fromOpaque(refcon).takeUnretainedValue()
+
+                if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                    manager.reenableTap()
+                    return Unmanaged.passUnretained(event)
+                }
+
                 let shouldSuppress = manager.handle(event: event, type: type)
                 return shouldSuppress ? nil : Unmanaged.passUnretained(event)
             },
@@ -46,7 +53,22 @@ final class HotkeyManager {
     }
 
     func reloadConfiguration() {
+        let wasHoldPressed = isHoldPressed
+        let wasSessionActive = isSessionActive
+
         start()
+
+        if wasSessionActive && wasHoldPressed {
+            isHoldPressed = true
+        }
+    }
+
+    func notifySessionStarted() {
+        isSessionActive = true
+    }
+
+    func notifySessionEnded() {
+        isSessionActive = false
     }
 
     func suspend() {
@@ -72,6 +94,11 @@ final class HotkeyManager {
 
         isHoldPressed = false
         isTogglePressed = false
+    }
+
+    private func reenableTap() {
+        guard let eventTap else { return }
+        CGEvent.tapEnable(tap: eventTap, enable: true)
     }
 
     private func handle(event: CGEvent, type: CGEventType) -> Bool {

@@ -15,6 +15,7 @@ final class VoiceInputAppModel: ObservableObject {
     let overlayController: PreviewOverlayController
     let orchestrator: RecognitionOrchestrator
     let hotkeyManager: HotkeyManager
+    let hotwordStore: HotwordStore
 
     @Published private(set) var lastInsertionResult: InsertionResult?
     @Published private(set) var lastErrorMessage: String?
@@ -22,6 +23,7 @@ final class VoiceInputAppModel: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
     private var activeTriggerKind: ActiveTriggerKind?
+    private var isTransitioning = false
 
     init() {
         let settings = AppSettings()
@@ -30,6 +32,8 @@ final class VoiceInputAppModel: ObservableObject {
         let overlayController = PreviewOverlayController(previewState: previewState, settings: settings)
         let providerFactory = ProviderFactory(settings: settings)
         let postProcessor = TranscriptPostProcessor()
+        let hotwordStore = HotwordStore()
+        let smartPostProcessor = SmartPostProcessor(settings: settings, hotwordStore: hotwordStore)
         let textInsertionService = TextInsertionService()
         let audioCaptureEngine = AudioCaptureEngine()
         let orchestrator = RecognitionOrchestrator(
@@ -39,6 +43,7 @@ final class VoiceInputAppModel: ObservableObject {
             audioCaptureEngine: audioCaptureEngine,
             providerFactory: providerFactory,
             postProcessor: postProcessor,
+            smartPostProcessor: smartPostProcessor,
             textInsertionService: textInsertionService
         )
 
@@ -46,6 +51,7 @@ final class VoiceInputAppModel: ObservableObject {
         self.permissionCoordinator = permissionCoordinator
         self.previewState = previewState
         self.overlayController = overlayController
+        self.hotwordStore = hotwordStore
         self.orchestrator = orchestrator
         self.hotkeyManager = HotkeyManager(settings: settings)
 
@@ -131,6 +137,8 @@ final class VoiceInputAppModel: ObservableObject {
                 guard let self else { return }
                 if !isRunning {
                     self.activeTriggerKind = nil
+                    self.isTransitioning = false
+                    self.hotkeyManager.notifySessionEnded()
                 }
             }
             .store(in: &cancellables)
@@ -217,11 +225,15 @@ final class VoiceInputAppModel: ObservableObject {
     }
 
     private func beginCaptureUsingHoldHotkey() async {
-        guard activeTriggerKind == nil, !orchestrator.isSessionRunning else { return }
+        guard activeTriggerKind == nil, !orchestrator.isSessionRunning, !isTransitioning else { return }
         activeTriggerKind = .holdToTalk
+        isTransitioning = true
+        hotkeyManager.notifySessionStarted()
         await orchestrator.beginCapture()
+        isTransitioning = false
         if !orchestrator.isSessionRunning {
             activeTriggerKind = nil
+            hotkeyManager.notifySessionEnded()
         }
     }
 
@@ -231,6 +243,8 @@ final class VoiceInputAppModel: ObservableObject {
     }
 
     private func toggleCaptureUsingToggleHotkey() async {
+        guard !isTransitioning else { return }
+
         if activeTriggerKind == .toggleToTalk || (activeTriggerKind == nil && orchestrator.isSessionRunning) {
             activeTriggerKind = .toggleToTalk
             await orchestrator.endCapture()
@@ -239,9 +253,13 @@ final class VoiceInputAppModel: ObservableObject {
 
         guard activeTriggerKind == nil, !orchestrator.isSessionRunning else { return }
         activeTriggerKind = .toggleToTalk
+        isTransitioning = true
+        hotkeyManager.notifySessionStarted()
         await orchestrator.beginCapture()
+        isTransitioning = false
         if !orchestrator.isSessionRunning {
             activeTriggerKind = nil
+            hotkeyManager.notifySessionEnded()
         }
     }
 }

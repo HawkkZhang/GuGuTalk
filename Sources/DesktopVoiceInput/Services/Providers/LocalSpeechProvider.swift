@@ -1,5 +1,6 @@
 import Foundation
 import Speech
+import os
 
 final class LocalSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable {
     let mode: RecognitionMode = .local
@@ -10,6 +11,11 @@ final class LocalSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognizer: SFSpeechRecognizer?
     private var revision = 0
+    private var committedTranscript = ""
+    private var currentSegmentTranscript = ""
+    private var lastTranscriptLength = 0
+
+    private static let logger = Logger(subsystem: "com.desktopvoiceinput", category: "LocalSpeech")
 
     override init() {
         var continuation: AsyncStream<TranscriptEvent>.Continuation?
@@ -42,6 +48,9 @@ final class LocalSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable {
         self.recognizer = recognizer
         self.recognitionRequest = request
         self.revision = 0
+        self.committedTranscript = ""
+        self.currentSegmentTranscript = ""
+        self.lastTranscriptLength = 0
 
         continuation.yield(.sessionStarted(mode: mode))
 
@@ -59,13 +68,32 @@ final class LocalSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable {
 
             self.revision += 1
             let transcript = result.bestTranscription.formattedString
+            let currentLength = transcript.count
+
+            if currentLength < Int(Double(self.lastTranscriptLength) * 0.6) && currentLength > 0 {
+                Self.logger.debug("New segment detected (length dropped >40%): old=\(self.lastTranscriptLength) new=\(currentLength)")
+                if !self.currentSegmentTranscript.isEmpty {
+                    self.committedTranscript += self.currentSegmentTranscript
+                    Self.logger.debug("Committed segment: [\(self.currentSegmentTranscript, privacy: .public)]")
+                }
+                self.currentSegmentTranscript = transcript
+            } else {
+                self.currentSegmentTranscript = transcript
+            }
+
+            self.lastTranscriptLength = currentLength
+            let fullTranscript = self.committedTranscript + self.currentSegmentTranscript
+
+            Self.logger.debug("Local speech: isFinal=\(result.isFinal) current=[\(transcript, privacy: .public)] full=[\(fullTranscript, privacy: .public)]")
 
             if result.isFinal {
                 self.cleanupRecognitionResources(cancelTask: false)
-                self.continuation.yield(.finalTextReady(text: transcript))
+                let finalText = self.committedTranscript + self.currentSegmentTranscript
+                Self.logger.debug("Final result: [\(finalText, privacy: .public)]")
+                self.continuation.yield(.finalTextReady(text: finalText))
                 self.continuation.yield(.sessionEnded)
             } else {
-                self.continuation.yield(.partialTextUpdated(text: transcript, revision: self.revision))
+                self.continuation.yield(.partialTextUpdated(text: fullTranscript, revision: self.revision))
             }
         }
     }

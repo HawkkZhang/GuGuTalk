@@ -1,0 +1,98 @@
+import Foundation
+import os
+
+@MainActor
+final class SmartPostProcessor {
+    private static let logger = Logger(subsystem: "com.end.DesktopVoiceInput", category: "SmartPostProcessor")
+
+    private let settings: AppSettings
+    private let llmClient: LLMClient
+    private let fallback: TranscriptPostProcessor
+    private let hotwordStore: HotwordStore
+
+    init(settings: AppSettings, hotwordStore: HotwordStore, llmClient: LLMClient = LLMClient()) {
+        self.settings = settings
+        self.hotwordStore = hotwordStore
+        self.llmClient = llmClient
+        self.fallback = TranscriptPostProcessor()
+    }
+
+    func processRulesOnly(text: String) -> String {
+        let punctuationRules = settings.punctuationMode.rules
+        var result = PostProcessingConfig.applyRules(punctuationRules, to: text)
+        result = applyHotwordCorrection(to: result)
+        return result
+    }
+
+    func process(text: String, targetApp: String?, targetBundleID: String?) async -> String {
+        // 标点处理始终生效，不依赖 LLM 开关
+        let punctuationRules = settings.punctuationMode.rules
+        var result = PostProcessingConfig.applyRules(punctuationRules, to: text)
+
+        // 热词模糊替换（规则层，始终生效）
+        result = applyHotwordCorrection(to: result)
+
+        if result.isEmpty {
+            return result
+        }
+
+        // LLM 后处理需要开关打开
+        guard settings.postProcessingEnabled else {
+            return result.isEmpty ? fallback.finalize(text) : result
+        }
+
+        let pipeline = resolvePipeline(targetApp: targetApp, targetBundleID: targetBundleID)
+
+        // 执行预设的规则层（如果有）
+        if !pipeline.rules.isEmpty {
+            result = PostProcessingConfig.applyRules(pipeline.rules, to: result)
+        }
+
+        // 执行 LLM 层
+        if let prompt = pipeline.llmPrompt, !prompt.isEmpty {
+            let config = settings.llmProviderConfig
+            guard config.isConfigured else {
+                Self.logger.info("LLM not configured, skipping LLM post-processing")
+                return result
+            }
+
+            let systemPrompt = buildSystemPrompt(basePrompt: prompt)
+
+            do {
+                let llmResult = try await llmClient.complete(system: systemPrompt, user: result, config: config)
+                if !llmResult.isEmpty {
+                    result = llmResult
+                }
+            } catch {
+                Self.logger.error("LLM post-processing failed, using rule-only result. error=\(error.localizedDescription, privacy: .public)")
+            }
+        }
+
+        return result
+    }
+
+    private func resolvePipeline(targetApp: String?, targetBundleID: String?) -> PostProcessingConfig.ProcessingPipeline {
+        if let preset = settings.postProcessingPreset {
+            let prompt = settings.effectivePrompt(for: preset)
+            return PostProcessingConfig.ProcessingPipeline(
+                rules: [.collapseWhitespace, .trimWhitespace],
+                llmPrompt: prompt
+            )
+        }
+
+        return PostProcessingConfig.ProcessingPipeline(
+            rules: [.collapseWhitespace, .trimWhitespace]
+        )
+    }
+
+    private func buildSystemPrompt(basePrompt: String) -> String {
+        let replacements = hotwordStore.replacements
+        guard !replacements.isEmpty else { return basePrompt }
+        let wordList = replacements.map(\.to).joined(separator: "、")
+        return basePrompt + "\n\n参考热词表（如果识别结果中有发音相近但拼写不同的词，优先使用热词表中的正确写法）：\(wordList)"
+    }
+
+    private func applyHotwordCorrection(to text: String) -> String {
+        hotwordStore.applyReplacements(to: text)
+    }
+}

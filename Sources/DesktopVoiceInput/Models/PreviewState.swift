@@ -7,6 +7,7 @@ final class PreviewState: ObservableObject {
     @Published var title = "桌面语音输入"
     @Published var message = "按住或按一下快捷键开始说话"
     @Published var transcript = ""
+    @Published var hintMessage: String?
     @Published var errorMessage: String?
     @Published var audioLevel: Float = 0
     @Published var isRecording = false
@@ -24,6 +25,7 @@ final class PreviewState: ObservableObject {
         title = "桌面语音输入"
         message = "按住或按一下快捷键开始说话"
         transcript = ""
+        hintMessage = nil
         errorMessage = nil
         audioLevel = 0
         isRecording = false

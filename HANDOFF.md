@@ -73,6 +73,7 @@ The most recent UI direction is:
 - Do not assume hotkeys are fully stable. Dual hotkey mode still needs testing and polish.
 - Do not let shortcut recording trigger live voice input.
 - Do not let recognized text insert into the app's own settings or internal UI.
+- Treat text insertion compatibility as a top-priority product risk. Browser and web rich-text editors can expose placeholder / hint text through Accessibility APIs, so direct AX read-modify-write can accidentally merge hint text into the dictated result. Prefer paste-style insertion for browsers / web editors, keep Accessibility insertion for safe native controls, and build toward per-app strategy memory plus full pasteboard restoration.
 - Cloud provider credentials live in local user defaults and are not committed.
 - macOS permissions are per-machine and are not committed.
 - Xcode signing/distribution is not production-ready.
@@ -81,11 +82,12 @@ The most recent UI direction is:
 ## Next Recommended Work
 
 1. Stabilize hotkey state transitions.
-2. Add self-protection so settings/internal windows cannot receive dictated text.
-3. Improve provider configuration validation before a recording session starts.
-4. Improve provider visibility in the menu bar console and errors.
-5. Add automated tests for hotkeys, insertion guards, and provider selection.
-6. Eventually set up signing, packaging, and release artifacts.
+2. Harden the text insertion pipeline for browsers, rich-text editors, Electron apps, and native text fields.
+3. Add self-protection so settings/internal windows cannot receive dictated text.
+4. Improve provider configuration validation before a recording session starts.
+5. Improve provider visibility in the menu bar console and errors.
+6. Add automated tests for hotkeys, insertion guards, and provider selection.
+7. Eventually set up signing, packaging, and release artifacts.
 
 ## Suggested Prompt For Another AI Tool
 

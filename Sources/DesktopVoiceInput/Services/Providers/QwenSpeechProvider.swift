@@ -8,6 +8,9 @@ final class QwenSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable {
     private var transport: RealtimeWebSocketTransport?
     private var revision = 0
     private var endpointingPolicy: EndpointingPolicy = .voiceActivityDetection
+    private var accumulatedTranscript = ""
+    private var hasRequestedFinish = false
+    private var hasEmittedFinalResult = false
 
     override init() {
         var continuation: AsyncStream<TranscriptEvent>.Continuation?
@@ -32,6 +35,9 @@ final class QwenSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable {
         request.addValue("realtime=v1", forHTTPHeaderField: "OpenAI-Beta")
         self.revision = 0
         self.endpointingPolicy = config.endpointing
+        self.accumulatedTranscript = ""
+        self.hasRequestedFinish = false
+        self.hasEmittedFinalResult = false
         self.transport = RealtimeWebSocketTransport(
             request: request,
             onMessage: { [weak self] message in
@@ -75,6 +81,8 @@ final class QwenSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable {
     }
 
     func finishAudio() async throws {
+        hasRequestedFinish = true
+
         if endpointingPolicy == .manual {
             try await transport?.send(text: QwenClientEvent.commit().jsonString)
         }
@@ -95,9 +103,18 @@ final class QwenSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable {
             switch event.type {
             case "conversation.item.input_audio_transcription.text":
                 revision += 1
-                continuation.yield(.partialTextUpdated(text: (event.stash ?? "") + (event.text ?? ""), revision: revision))
+                let turnText = (event.stash ?? "") + (event.text ?? "")
+                continuation.yield(.partialTextUpdated(text: accumulatedTranscript + turnText, revision: revision))
             case "conversation.item.input_audio_transcription.completed":
-                continuation.yield(.finalTextReady(text: event.transcript ?? event.text ?? ""))
+                let turnResult = event.transcript ?? event.text ?? ""
+                accumulatedTranscript += turnResult
+                if hasRequestedFinish && !hasEmittedFinalResult {
+                    hasEmittedFinalResult = true
+                    continuation.yield(.finalTextReady(text: accumulatedTranscript))
+                } else {
+                    revision += 1
+                    continuation.yield(.partialTextUpdated(text: accumulatedTranscript, revision: revision))
+                }
             case "conversation.item.input_audio_transcription.failed":
                 let message = event.error?.message ?? event.message ?? "识别失败"
                 continuation.yield(.sessionFailed(SessionFailureInfo(message: "千问识别失败：\(message)")))
@@ -105,6 +122,10 @@ final class QwenSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable {
             case "session.created":
                 break
             case "session.finished":
+                if hasRequestedFinish && !hasEmittedFinalResult && !accumulatedTranscript.isEmpty {
+                    hasEmittedFinalResult = true
+                    continuation.yield(.finalTextReady(text: accumulatedTranscript))
+                }
                 continuation.yield(.sessionEnded)
             case "error":
                 let message = event.message ?? event.error?.message ?? "未知错误"
@@ -176,7 +197,7 @@ private struct QwenClientEvent: Encodable {
     }
 
     static func sessionUpdate(session: SessionDescriptor) -> QwenClientEvent {
-        QwenClientEvent(
+        return QwenClientEvent(
             eventID: UUID().uuidString,
             type: "session.update",
             session: SessionPayload(
@@ -185,7 +206,7 @@ private struct QwenClientEvent: Encodable {
                 sampleRate: session.sampleRate,
                 inputAudioTranscription: .init(language: session.language),
                 turnDetection: session.endpointingPolicy == .voiceActivityDetection
-                    ? .init(type: "server_vad", threshold: session.partialResultsEnabled ? 0.0 : 0.5, silenceDurationMs: 400)
+                    ? .init(type: "server_vad", threshold: session.partialResultsEnabled ? 0.0 : 0.5, silenceDurationMs: 800)
                     : nil
             ),
             audio: nil

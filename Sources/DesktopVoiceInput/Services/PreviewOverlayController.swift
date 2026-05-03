@@ -51,9 +51,9 @@ final class PreviewOverlayController {
             }
             .store(in: &cancellables)
 
-        Publishers.CombineLatest(previewState.$transcript.removeDuplicates(), previewState.$errorMessage.removeDuplicates())
+        Publishers.CombineLatest3(previewState.$transcript.removeDuplicates(), previewState.$errorMessage.removeDuplicates(), previewState.$hintMessage.removeDuplicates())
             .receive(on: RunLoop.main)
-            .sink { [weak self] _, _ in
+            .sink { [weak self] _, _, _ in
                 guard let self, self.previewState.isVisible else { return }
                 self.updateFrame(animated: true)
             }
@@ -75,8 +75,8 @@ final class PreviewOverlayController {
 
         if animated, panel.isVisible {
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.26
-                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                context.duration = 0.14
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
                 panel.animator().setFrame(frame, display: true)
             }
         } else {
@@ -102,19 +102,38 @@ final class PreviewOverlayController {
             return NSSize(width: 300, height: 88)
         }
 
+        if state.hintMessage != nil {
+            return NSSize(width: 240, height: 54)
+        }
+
         let metrics = TranscriptLayoutMetrics(text: state.transcript)
         if metrics.trimmedText.isEmpty {
             return NSSize(width: 172, height: 54)
         }
 
+        let charCount = metrics.trimmedText.count
+        let avgCharWidth: CGFloat = 11.5
+        let estimatedTextWidth = CGFloat(charCount) * avgCharWidth
+        let padding: CGFloat = 70
+        let desiredWidth = estimatedTextWidth + padding
+
+        let minWidth: CGFloat = 200
+        let maxWidthForLines: CGFloat
         switch metrics.lineCount {
-        case 1:
-            return NSSize(width: 304, height: 70)
-        case 2:
-            return NSSize(width: 334, height: 96)
-        default:
-            return NSSize(width: 366, height: 124)
+        case 1: maxWidthForLines = 340
+        case 2: maxWidthForLines = 380
+        default: maxWidthForLines = 420
         }
+        let width = min(max(desiredWidth, minWidth), maxWidthForLines)
+
+        let height: CGFloat
+        switch metrics.lineCount {
+        case 1: height = 70
+        case 2: height = 98
+        default: height = 128
+        }
+
+        return NSSize(width: width, height: height)
     }
 }
 
@@ -139,6 +158,12 @@ private struct PreviewOverlayView: View {
                     .lineLimit(3)
                     .truncationMode(.tail)
                     .fixedSize(horizontal: false, vertical: true)
+            } else if let hintMessage = previewState.hintMessage {
+                Text(hintMessage)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(DVITheme.secondaryInk)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
             } else if transcriptMetrics.trimmedText.isEmpty {
                 waveform
             } else {
@@ -172,16 +197,16 @@ private struct PreviewOverlayView: View {
 
     private var transcriptContent: some View {
         ZStack(alignment: .bottomTrailing) {
-            embeddedWaveform
-
             RollingTranscriptText(
                 text: transcriptMetrics.displayText,
                 lineLimit: transcriptMetrics.lineCount,
                 color: primaryText
             )
             .padding(.horizontal, 6)
+            .frame(maxWidth: .infinity, alignment: .center)
+
+            embeddedWaveform
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
     private var embeddedWaveform: some View {
@@ -191,11 +216,10 @@ private struct PreviewOverlayView: View {
             isActive: previewState.isRecording,
             isCompact: false
         )
-        .scaleEffect(0.92)
-        .opacity(0.18)
-        .padding(.trailing, 2)
-        .padding(.bottom, -1)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+        .scaleEffect(0.90)
+        .opacity(0.16)
+        .padding(.trailing, 3)
+        .padding(.bottom, 0)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
@@ -203,7 +227,7 @@ private struct PreviewOverlayView: View {
 }
 
 private struct TranscriptLayoutMetrics {
-    private static let charactersPerLine = 19
+    private static let charactersPerLine = 21
     let trimmedText: String
     let lineCount: Int
     let displayText: String
@@ -239,34 +263,25 @@ private struct RollingTranscriptText: View {
     let lineLimit: Int
     let color: Color
 
-    @State private var visibleText = ""
-    @State private var isFading = false
+    @State private var blurRadius: CGFloat = 0
 
     var body: some View {
-        Text(visibleText.isEmpty ? text : visibleText)
+        Text(text)
             .font(.system(size: 15, weight: .medium))
             .foregroundStyle(color)
             .multilineTextAlignment(.center)
             .lineLimit(lineLimit)
             .truncationMode(.tail)
-            .lineSpacing(2.5)
+            .lineSpacing(2.8)
             .textSelection(.enabled)
-            .opacity(isFading ? 0.84 : 1)
             .frame(maxWidth: .infinity, alignment: .center)
-            .onAppear {
-                visibleText = text
-            }
-            .onChange(of: text) { _, newValue in
-                guard newValue != visibleText else { return }
-                visibleText = newValue
-                withAnimation(.smooth(duration: 0.14)) {
-                    isFading = true
-                }
-                withAnimation(.smooth(duration: 0.18).delay(0.04)) {
-                    isFading = false
+            .blur(radius: blurRadius)
+            .onChange(of: text) { _, _ in
+                blurRadius = 0.65
+                withAnimation(.easeOut(duration: 0.18)) {
+                    blurRadius = 0
                 }
             }
-            .animation(.smooth(duration: 0.22), value: lineLimit)
     }
 }
 

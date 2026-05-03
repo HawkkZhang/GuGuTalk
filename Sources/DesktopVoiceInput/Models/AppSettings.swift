@@ -26,6 +26,14 @@ final class AppSettings: ObservableObject {
         static let qwenModel = "qwenModel"
         static let qwenEndpoint = "qwenEndpoint"
         static let appearancePreference = "appearancePreference"
+        static let llmProtocolType = "llmProtocolType"
+        static let llmEndpoint = "llmEndpoint"
+        static let llmAPIKey = "llmAPIKey"
+        static let llmModel = "llmModel"
+        static let postProcessingEnabled = "postProcessingEnabled"
+        static let postProcessingPreset = "postProcessingPreset"
+        static let punctuationMode = "punctuationMode"
+        static let customLLMPrompt = "customLLMPrompt_"
     }
 
     @Published var preferredMode: RecognitionMode {
@@ -88,6 +96,34 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(appearancePreference.rawValue, forKey: Keys.appearancePreference) }
     }
 
+    @Published var llmProtocolType: LLMProtocolType {
+        didSet { defaults.set(llmProtocolType.rawValue, forKey: Keys.llmProtocolType) }
+    }
+
+    @Published var llmEndpoint: String {
+        didSet { defaults.set(llmEndpoint, forKey: Keys.llmEndpoint) }
+    }
+
+    @Published var llmAPIKey: String {
+        didSet { defaults.set(llmAPIKey, forKey: Keys.llmAPIKey) }
+    }
+
+    @Published var llmModel: String {
+        didSet { defaults.set(llmModel, forKey: Keys.llmModel) }
+    }
+
+    @Published var postProcessingEnabled: Bool {
+        didSet { defaults.set(postProcessingEnabled, forKey: Keys.postProcessingEnabled) }
+    }
+
+    @Published var postProcessingPreset: PostProcessingPreset? {
+        didSet { defaults.set(postProcessingPreset?.rawValue ?? "", forKey: Keys.postProcessingPreset) }
+    }
+
+    @Published var punctuationMode: PunctuationMode {
+        didSet { defaults.set(punctuationMode.rawValue, forKey: Keys.punctuationMode) }
+    }
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
@@ -132,6 +168,37 @@ final class AppSettings: ObservableObject {
         self.qwenModel = storedQwenModel == "qwen3-asr-flash" ? "qwen3-asr-flash-realtime" : storedQwenModel
         self.qwenEndpoint = defaults.string(forKey: Keys.qwenEndpoint) ?? "wss://dashscope.aliyuncs.com/api-ws/v1/realtime"
         self.appearancePreference = AppearancePreference(rawValue: defaults.string(forKey: Keys.appearancePreference) ?? "") ?? .system
+        self.llmProtocolType = LLMProtocolType(rawValue: defaults.string(forKey: Keys.llmProtocolType) ?? "") ?? .openAICompatible
+        self.llmEndpoint = defaults.string(forKey: Keys.llmEndpoint) ?? ""
+        self.llmAPIKey = defaults.string(forKey: Keys.llmAPIKey) ?? ""
+        self.llmModel = defaults.string(forKey: Keys.llmModel) ?? ""
+        self.postProcessingEnabled = defaults.bool(forKey: Keys.postProcessingEnabled)
+        let presetRaw = defaults.string(forKey: Keys.postProcessingPreset) ?? ""
+        self.postProcessingPreset = presetRaw.isEmpty ? nil : PostProcessingPreset(rawValue: presetRaw)
+        self.punctuationMode = PunctuationMode(rawValue: defaults.string(forKey: Keys.punctuationMode) ?? "") ?? .keep
+    }
+
+    var llmProviderConfig: LLMProviderConfig {
+        LLMProviderConfig(
+            protocolType: llmProtocolType,
+            endpoint: llmEndpoint.trimmingCharacters(in: .whitespacesAndNewlines),
+            apiKey: llmAPIKey.trimmingCharacters(in: .whitespacesAndNewlines),
+            model: llmModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
+    func customPrompt(for preset: PostProcessingPreset) -> String {
+        defaults.string(forKey: Keys.customLLMPrompt + preset.rawValue) ?? ""
+    }
+
+    func setCustomPrompt(_ prompt: String, for preset: PostProcessingPreset) {
+        defaults.set(prompt, forKey: Keys.customLLMPrompt + preset.rawValue)
+        objectWillChange.send()
+    }
+
+    func effectivePrompt(for preset: PostProcessingPreset) -> String {
+        let custom = customPrompt(for: preset)
+        return custom.isEmpty ? preset.defaultPrompt : custom
     }
 
     var recognitionConfig: RecognitionConfig {
