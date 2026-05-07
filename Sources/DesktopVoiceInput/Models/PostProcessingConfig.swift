@@ -10,10 +10,10 @@ enum PunctuationMode: String, CaseIterable, Identifiable, Codable {
 
     var title: String {
         switch self {
-        case .keep: "保留原样"
+        case .keep: "智能添加"
         case .remove: "去掉标点"
-        case .replaceWithSpace: "空格代替"
-        case .removeTrailing: "去句尾句号"
+        case .replaceWithSpace: "空格代替标点"
+        case .removeTrailing: "去掉句尾句号"
         }
     }
 
@@ -136,7 +136,7 @@ struct PostProcessingConfig: Codable {
 }
 
 enum PostProcessingPreset: String, CaseIterable, Identifiable, Codable {
-    case correction
+    case removeFillers
     case formal
     case bulletPoints
 
@@ -144,22 +144,28 @@ enum PostProcessingPreset: String, CaseIterable, Identifiable, Codable {
 
     var title: String {
         switch self {
-        case .correction: "纠错"
-        case .formal: "正式化"
-        case .bulletPoints: "列表"
+        case .removeFillers: "去口语词"
+        case .formal: "书面化"
+        case .bulletPoints: "智能分点"
         }
     }
 
     var defaultPrompt: String {
         switch self {
-        case .correction:
-            "你是一个语音识别纠错助手。只修正明显的语音识别错误（同音字、漏字、多字），保持原意和语气完全不变。直接输出修正后的文本，不要解释。"
+        case .removeFillers:
+            "你是一个语音文本清理助手。去除口语中的填充词和语气词（如：嗯、啊、那个、就是、然后、对吧、这个），修正明显的语音识别错误，如果表达中存在逻辑不通顺或前后矛盾的地方也一并修正，保持原意和语气不变。直接输出清理后的文本，不要解释。"
         case .formal:
             "你是一个文本润色助手。将口语化表达转为正式书面语，保持原意不变。直接输出润色后的文本，不要解释。"
         case .bulletPoints:
-            "你是一个文本格式化助手。将输入内容整理为 markdown 无序列表格式（每个要点一行，以 - 开头）。直接输出格式化后的文本，不要解释。"
+            "你是一个文本格式化助手。智能判断输入内容中哪些部分适合分点展示：将并列要点、步骤或条目整理为分点格式（并列内容用无序列表 -，有顺序的步骤用有序列表 1. 2. 3.），其余不需要分点的内容保持原文不变，正常输出。直接输出结果，不要解释。"
         }
     }
 
     var needsLLM: Bool { true }
+}
+
+struct CustomPostProcessingMode: Codable, Identifiable, Equatable {
+    var id: String { name }
+    var name: String
+    var prompt: String
 }

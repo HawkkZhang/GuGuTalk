@@ -39,6 +39,27 @@ struct PermissionGuideView: View {
                 ForEach(missingPermissions) { permission in
                     permissionRow(permission)
                 }
+
+                // 刷新按钮
+                HStack {
+                    Spacer()
+                    Button {
+                        Task {
+                            await appModel.refreshPermissionStatus()
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 11))
+                            Text("刷新检查")
+                                .font(.system(size: 12))
+                        }
+                        .foregroundStyle(DVITheme.accent)
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
+                }
+                .padding(.top, 4)
             }
         }
         .padding(compact ? 12 : 14)

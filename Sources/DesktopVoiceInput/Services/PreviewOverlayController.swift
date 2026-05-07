@@ -91,7 +91,7 @@ final class PreviewOverlayController {
 
         return NSRect(
             x: screenFrame.midX - size.width / 2,
-            y: screenFrame.maxY - size.height - 42,
+            y: screenFrame.minY + 80,
             width: size.width,
             height: size.height
         )
@@ -120,17 +120,15 @@ final class PreviewOverlayController {
         let minWidth: CGFloat = 200
         let maxWidthForLines: CGFloat
         switch metrics.lineCount {
-        case 1: maxWidthForLines = 340
-        case 2: maxWidthForLines = 380
-        default: maxWidthForLines = 420
+        case 1: maxWidthForLines = 420
+        default: maxWidthForLines = 480
         }
         let width = min(max(desiredWidth, minWidth), maxWidthForLines)
 
         let height: CGFloat
         switch metrics.lineCount {
-        case 1: height = 70
-        case 2: height = 98
-        default: height = 128
+        case 1: height = 74
+        default: height = 102
         }
 
         return NSSize(width: width, height: height)
@@ -227,7 +225,7 @@ private struct PreviewOverlayView: View {
 }
 
 private struct TranscriptLayoutMetrics {
-    private static let charactersPerLine = 21
+    private static let charactersPerLine = 28
     let trimmedText: String
     let lineCount: Int
     let displayText: String
@@ -246,7 +244,7 @@ private struct TranscriptLayoutMetrics {
         }
 
         let requiredLines = Int(ceil(Double(normalized.count) / Double(Self.charactersPerLine)))
-        let lineCount = min(max(requiredLines, 1), 3)
+        let lineCount = min(max(requiredLines, 1), 2)
         let capacity = max(Self.charactersPerLine * lineCount - 1, 1)
         self.lineCount = lineCount
 

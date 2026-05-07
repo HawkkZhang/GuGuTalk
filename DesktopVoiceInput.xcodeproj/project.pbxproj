@@ -37,6 +37,7 @@
 		30000000000000000000001C /* LLMClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000001C /* LLMClient.swift */; };
 		30000000000000000000001D /* SmartPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000001D /* SmartPostProcessor.swift */; };
 		30000000000000000000001E /* HotwordStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000001E /* HotwordStore.swift */; };
+		30000000000000000000001F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000001F /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -72,6 +73,7 @@
 		20000000000000000000001C /* LLMClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMClient.swift; sourceTree = "<group>"; };
 		20000000000000000000001D /* SmartPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartPostProcessor.swift; sourceTree = "<group>"; };
 		20000000000000000000001E /* HotwordStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotwordStore.swift; sourceTree = "<group>"; };
+		20000000000000000000001F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -106,6 +108,7 @@
 			isa = PBXGroup;
 			children = (
 				200000000000000000000001 /* DesktopVoiceInput.swift */,
+				20000000000000000000001F /* Assets.xcassets */,
 				100000000000000000000005 /* App */,
 				100000000000000000000006 /* Models */,
 				100000000000000000000007 /* Services */,
@@ -244,6 +247,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				30000000000000000000001F /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -293,13 +297,14 @@
 		400000000000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGNING_ALLOWED = NO;
-				CODE_SIGNING_REQUIRED = NO;
-				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_ENTITLEMENTS = Config/DesktopVoiceInput.entitlements;
+				CODE_SIGN_IDENTITY = "GuGuTalk Local Code Signing";
+				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_LANGUAGE = en;
-				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Config/DesktopVoiceInput-Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -321,13 +326,14 @@
 		400000000000000000000002 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGNING_ALLOWED = NO;
-				CODE_SIGNING_REQUIRED = NO;
-				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_ENTITLEMENTS = Config/DesktopVoiceInput.entitlements;
+				CODE_SIGN_IDENTITY = "GuGuTalk Local Code Signing";
+				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_LANGUAGE = en;
-				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Config/DesktopVoiceInput-Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

@@ -60,7 +60,7 @@ final class PermissionCoordinator: ObservableObject {
         microphone.isUsable && accessibility.isUsable && inputMonitoring.isUsable
     }
 
-    private func refreshMicrophone(prompt: Bool) async -> PermissionState {
+    func refreshMicrophone(prompt: Bool) async -> PermissionState {
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:
             return .authorized
@@ -75,7 +75,7 @@ final class PermissionCoordinator: ObservableObject {
         }
     }
 
-    private func refreshSpeechRecognition(prompt: Bool) async -> PermissionState {
+    func refreshSpeechRecognition(prompt: Bool) async -> PermissionState {
         switch SFSpeechRecognizer.authorizationStatus() {
         case .authorized:
             return .authorized
@@ -83,40 +83,53 @@ final class PermissionCoordinator: ObservableObject {
             return .denied
         case .notDetermined:
             guard prompt else { return .notDetermined }
-            return await withCheckedContinuation { continuation in
-                SFSpeechRecognizer.requestAuthorization { status in
-                    switch status {
-                    case .authorized:
-                        continuation.resume(returning: .authorized)
-                    case .denied, .restricted:
-                        continuation.resume(returning: .denied)
-                    case .notDetermined:
-                        continuation.resume(returning: .notDetermined)
-                    @unknown default:
-                        continuation.resume(returning: .unsupported)
-                    }
-                }
-            }
+            return await Self.requestSpeechRecognitionAuthorization()
         @unknown default:
             return .unsupported
         }
     }
 
-    private func refreshAccessibility(prompt: Bool) -> PermissionState {
-        let options = ["AXTrustedCheckOptionPrompt": prompt] as CFDictionary
-        return AXIsProcessTrustedWithOptions(options) ? .authorized : .denied
+    nonisolated private static func requestSpeechRecognitionAuthorization() async -> PermissionState {
+        await withCheckedContinuation { continuation in
+            SFSpeechRecognizer.requestAuthorization { status in
+                let state = speechPermissionState(from: status)
+                continuation.resume(returning: state)
+            }
+        }
     }
 
-    private func refreshInputMonitoring(prompt: Bool) -> PermissionState {
-        if CGPreflightListenEventAccess() {
-            return .authorized
+    nonisolated private static func speechPermissionState(from status: SFSpeechRecognizerAuthorizationStatus) -> PermissionState {
+        switch status {
+        case .authorized:
+            .authorized
+        case .denied, .restricted:
+            .denied
+        case .notDetermined:
+            .notDetermined
+        @unknown default:
+            .unsupported
+        }
+    }
+
+    func refreshAccessibility(prompt: Bool) -> PermissionState {
+        let trusted = AXIsProcessTrusted()
+
+        if !trusted && prompt {
+            let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+            _ = AXIsProcessTrustedWithOptions(options)
         }
 
-        if prompt {
+        return trusted ? .authorized : .denied
+    }
+
+    func refreshInputMonitoring(prompt: Bool) -> PermissionState {
+        let hasAccess = CGPreflightListenEventAccess()
+
+        if !hasAccess && prompt {
             let granted = CGRequestListenEventAccess()
             return granted ? .authorized : .denied
         }
 
-        return .denied
+        return hasAccess ? .authorized : .denied
     }
 }

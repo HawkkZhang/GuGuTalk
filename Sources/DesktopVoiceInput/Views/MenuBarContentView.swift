@@ -5,67 +5,35 @@ struct MenuBarContentView: View {
     @ObservedObject var appModel: VoiceInputAppModel
     @Environment(\.openSettings) private var openSettings
 
-    private let ink = DVITheme.ink
-    private let mutedInk = DVITheme.secondaryInk
-    private let brass = DVITheme.caution
-    private let moss = DVITheme.ready
-    private let crimson = DVITheme.danger
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            statusHeader
-            modeSelector
+        VStack(alignment: .leading, spacing: 10) {
+            // 状态 + 快捷键
+            HStack(alignment: .center, spacing: 8) {
+                Circle()
+                    .fill(statusTint)
+                    .frame(width: 8, height: 8)
 
-            if appModel.hasMissingPermissions {
-                permissionNotice
+                Text(appModel.settings.preferredMode.title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(DVITheme.ink)
+
+                Text("·")
+                    .foregroundStyle(DVITheme.secondaryInk)
+
+                Text(hotkeyDescription)
+                    .font(.system(size: 12))
+                    .foregroundStyle(DVITheme.secondaryInk)
+
+                Spacer()
+
+                if appModel.previewState.isRecording {
+                    Text("录音中")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(DVITheme.ready)
+                }
             }
 
-            if let lastErrorMessage = appModel.lastErrorMessage {
-                errorNotice(lastErrorMessage)
-            }
-
-            actionsRow
-        }
-        .padding(10)
-        .frame(width: 276)
-        .background(.regularMaterial)
-    }
-
-    private var statusHeader: some View {
-        HStack(alignment: .center, spacing: 9) {
-            Circle()
-                .fill(statusTint)
-                .frame(width: 8, height: 8)
-                .shadow(color: statusTint.opacity(appModel.previewState.isRecording ? 0.42 : 0), radius: 5)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(statusTitle)
-                    .font(.system(size: 14.5, weight: .semibold))
-                    .foregroundStyle(ink)
-
-            Text("\(appModel.settings.preferredMode.title) · \(statusDetail)")
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(mutedInk)
-            }
-
-            Spacer(minLength: 8)
-
-            if appModel.previewState.isRecording {
-                Text("录音中")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(moss)
-            }
-        }
-        .padding(.horizontal, 2)
-        .padding(.vertical, 4)
-    }
-
-    private var modeSelector: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text("识别模式")
-                .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(mutedInk)
-
+            // 模式切换
             Picker("识别模式", selection: $appModel.settings.preferredMode) {
                 ForEach(RecognitionMode.userSelectableModes) { mode in
                     Text(mode.title).tag(mode)
@@ -74,151 +42,66 @@ struct MenuBarContentView: View {
             .labelsHidden()
             .pickerStyle(.segmented)
             .controlSize(.small)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(DVITheme.panel.opacity(0.76), in: DVITheme.panelShape())
-        .overlay(
-            DVITheme.panelShape()
-                .stroke(DVITheme.separator.opacity(0.24), lineWidth: 1)
-        )
-    }
 
-    private var permissionNotice: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "hand.raised.fill")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(brass)
-                .frame(width: 18)
-
-            Text("缺少 \(appModel.missingPermissions.count) 项权限")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(ink)
-
-            Spacer()
-
-            Button("处理") {
-                appModel.requestPermissions()
+            // 权限提示（仅在缺失时显示）
+            if appModel.hasMissingPermissions {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(DVITheme.caution)
+                    Text("缺少 \(appModel.missingPermissions.count) 项权限")
+                        .font(.system(size: 11))
+                        .foregroundStyle(DVITheme.caution)
+                    Spacer()
+                    Button("处理") { openSettingsWindow(to: .permissions) }
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(DVITheme.panel.opacity(0.78), in: DVITheme.panelShape())
-        .overlay(
-            DVITheme.panelShape()
-                .stroke(DVITheme.stateStroke(brass), lineWidth: 1)
-        )
-    }
 
-    private func errorNotice(_ message: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(crimson)
-                .frame(width: 18)
+            // 操作
+            HStack(spacing: 8) {
+                Button("设置") { openSettingsWindow(to: .general) }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("上次失败")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(crimson)
-                Text(message)
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(crimson)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+
+                Button("退出") { appModel.quit() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(DVITheme.panel.opacity(0.78), in: DVITheme.panelShape())
-        .overlay(
-            DVITheme.panelShape()
-                .stroke(DVITheme.stateStroke(crimson), lineWidth: 1)
-        )
-    }
-
-    private var statusTitle: String {
-        if appModel.previewState.isRecording {
-            return "正在听写"
-        }
-
-        if appModel.hasMissingPermissions {
-            return "需要处理权限"
-        }
-
-        return "可以输入"
-    }
-
-    private var statusDetail: String {
-        if appModel.hasMissingPermissions {
-            return "先补齐权限"
-        }
-
-        if !appModel.settings.holdToTalkEnabled, !appModel.settings.toggleToTalkEnabled {
-            return "未启用快捷键"
-        }
-
-        return "可通过快捷键唤起"
+        .padding(12)
+        .frame(width: 260)
+        .background(.regularMaterial)
     }
 
     private var statusTint: Color {
         if appModel.previewState.isRecording {
-            return moss
+            return DVITheme.ready
         }
-
         if appModel.hasMissingPermissions {
-            return brass
+            return DVITheme.caution
         }
-
-        if !appModel.settings.holdToTalkEnabled, !appModel.settings.toggleToTalkEnabled {
-            return brass
-        }
-
-        return moss
+        return DVITheme.ready
     }
 
-    private var actionsRow: some View {
-        HStack(spacing: 8) {
-            if appModel.hasMissingPermissions {
-                Button("权限") {
-                    appModel.requestPermissions()
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-            } else {
-                Button("刷新") {
-                    Task {
-                        await appModel.permissionCoordinator.refreshAll(promptForSystemDialogs: false)
-                    }
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            }
-
-            Button("设置") {
-                openSettingsWindow()
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-
-            Spacer()
-
-            Button("退出") {
-                appModel.quit()
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+    private var hotkeyDescription: String {
+        if appModel.settings.holdToTalkEnabled {
+            return appModel.settings.holdToTalkHotkey.displayName + " 按住说话"
         }
+        if appModel.settings.toggleToTalkEnabled {
+            return appModel.settings.toggleToTalkHotkey.displayName + " 切换"
+        }
+        return "未设置快捷键"
     }
 
-    private func openSettingsWindow() {
+    private func openSettingsWindow(to tab: SettingsTab) {
+        appModel.prepareSettingsWindow(tab: tab)
         openSettings()
-
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
             NSApp.activate(ignoringOtherApps: true)
-
             for window in NSApp.windows where !(window is NSPanel) {
                 window.makeKeyAndOrderFront(nil)
                 window.orderFrontRegardless()

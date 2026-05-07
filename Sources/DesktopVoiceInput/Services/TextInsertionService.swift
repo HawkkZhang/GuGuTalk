@@ -1,34 +1,49 @@
 import AppKit
 import ApplicationServices
 import Foundation
+import os
 
 @MainActor
 final class TextInsertionService {
+    private static let logger = Logger(subsystem: "com.desktopvoiceinput", category: "TextInsertion")
+
     func insert(text: String) -> InsertionResult {
         let frontmostApplication = NSWorkspace.shared.frontmostApplication
         let targetApp = frontmostApplication?.localizedName
         let targetBundleID = frontmostApplication?.bundleIdentifier
 
+        Self.logger.info("开始插入文本，目标应用: \(targetApp ?? "未知", privacy: .public)，文本长度: \(text.count)")
+
         if targetBundleID == Bundle.main.bundleIdentifier {
+            Self.logger.warning("目标是自己的窗口，拒绝插入")
             return InsertionResult(
                 method: .failed,
                 targetAppName: targetApp,
                 succeeded: false,
-                failureReason: "当前焦点还在 Desktop Voice Input 自己的窗口里。为了避免把识别结果写坏设置项，这次不会自动插入。请先切到目标应用再说话。"
+                failureReason: "当前焦点还在 GuGuTalk 自己的窗口里。为了避免把识别结果写坏设置项，这次不会自动插入。请先切到目标应用再说话。"
             )
         }
 
+        Self.logger.info("尝试方法 1: 剪贴板粘贴")
         if clipboardPasteInsertion(text: text) {
+            Self.logger.info("✓ 剪贴板粘贴成功")
             return InsertionResult(method: .clipboardPaste, targetAppName: targetApp, succeeded: true, failureReason: nil)
         }
+        Self.logger.warning("✗ 剪贴板粘贴失败")
 
+        Self.logger.info("尝试方法 2: Accessibility API")
         if let result = accessibilityInsertion(text: text, targetApp: targetApp) {
+            Self.logger.info("✓ Accessibility 插入成功")
             return result
         }
+        Self.logger.warning("✗ Accessibility 插入失败")
 
+        Self.logger.info("尝试方法 3: 模拟键盘输入")
         if simulatedKeyboardInsertion(text: text) {
+            Self.logger.info("✓ 模拟键盘成功")
             return InsertionResult(method: .simulatedKeyboard, targetAppName: targetApp, succeeded: true, failureReason: nil)
         }
+        Self.logger.error("✗ 所有插入方法都失败")
 
         return InsertionResult(method: .failed, targetAppName: targetApp, succeeded: false, failureReason: "无法写入当前应用，请手动复制预览文本。")
     }

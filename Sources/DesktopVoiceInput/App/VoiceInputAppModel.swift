@@ -20,6 +20,8 @@ final class VoiceInputAppModel: ObservableObject {
     @Published private(set) var lastInsertionResult: InsertionResult?
     @Published private(set) var lastErrorMessage: String?
     @Published private(set) var appearanceRevision = UUID()
+    @Published private(set) var requestedSettingsTab: SettingsTab = .general
+    @Published private(set) var settingsFocusRequest = UUID()
 
     private var cancellables = Set<AnyCancellable>()
     private var activeTriggerKind: ActiveTriggerKind?
@@ -36,6 +38,10 @@ final class VoiceInputAppModel: ObservableObject {
         let smartPostProcessor = SmartPostProcessor(settings: settings, hotwordStore: hotwordStore)
         let textInsertionService = TextInsertionService()
         let audioCaptureEngine = AudioCaptureEngine()
+
+        // 预热音频引擎，减少首次启动延迟
+        audioCaptureEngine.prewarm()
+
         let orchestrator = RecognitionOrchestrator(
             settings: settings,
             permissionCoordinator: permissionCoordinator,
@@ -59,8 +65,8 @@ final class VoiceInputAppModel: ObservableObject {
         applyAppearance(settings.appearancePreference)
 
         Task {
-            await permissionCoordinator.refreshAll(promptForSystemDialogs: false)
-            hotkeyManager.start()
+            await refreshPermissionsAndUpdateHotkeys(promptForSystemDialogs: false)
+            openSettingsWindowIfPermissionsAreMissing()
         }
     }
 
@@ -114,7 +120,7 @@ final class VoiceInputAppModel: ObservableObject {
         Publishers.CombineLatest(settings.$holdToTalkHotkey, settings.$toggleToTalkHotkey)
             .dropFirst()
             .sink { [weak self] _ in
-                self?.hotkeyManager.reloadConfiguration()
+                self?.reloadHotkeysIfReady()
             }
             .store(in: &cancellables)
 
@@ -146,35 +152,57 @@ final class VoiceInputAppModel: ObservableObject {
         NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
             .sink { [weak self] _ in
                 guard let self else { return }
-                Task { await self.permissionCoordinator.refreshAll(promptForSystemDialogs: false) }
+                Task { await self.refreshPermissionsAndUpdateHotkeys(promptForSystemDialogs: false) }
+            }
+            .store(in: &cancellables)
+
+        // 监听窗口焦点变化，用户从系统设置返回时立即检查
+        NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                Task { await self.refreshPermissionsAndUpdateHotkeys(promptForSystemDialogs: false) }
             }
             .store(in: &cancellables)
     }
 
     func openSystemSettings() {
+        openFirstAvailableSystemSettingsURL([
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy",
+            "x-apple.systempreferences:com.apple.preference.security"
+        ])
+    }
+
+    func openSettingsWindow() {
         NSApp.activate(ignoringOtherApps: true)
-        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy") else {
-            return
-        }
-        NSWorkspace.shared.open(url)
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+    }
+
+    func prepareSettingsWindow(tab: SettingsTab) {
+        requestedSettingsTab = tab
+        settingsFocusRequest = UUID()
+    }
+
+    func showSettingsWindow(tab: SettingsTab) {
+        prepareSettingsWindow(tab: tab)
+        openSettingsWindow()
     }
 
     func openSystemSettings(for permission: AppPermissionKind) {
-        NSApp.activate(ignoringOtherApps: true)
-        guard let url = URL(string: permission.settingsURLString) else {
-            openSystemSettings()
-            return
+        openFirstAvailableSystemSettingsURL(permission.settingsURLStrings + permission.fallbackSettingsURLStrings)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            NSWorkspace.shared.runningApplications
+                .first { $0.bundleIdentifier == "com.apple.systempreferences" }?
+                .activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
         }
-        NSWorkspace.shared.open(url)
     }
 
     func requestPermissions() {
-        NSApp.activate(ignoringOtherApps: true)
+        showSettingsWindow(tab: .permissions)
+    }
 
-        Task {
-            await permissionCoordinator.requestMissingPermissions(for: settings.preferredMode)
-            await permissionCoordinator.refreshAll(promptForSystemDialogs: false)
-        }
+    func refreshPermissionStatus() async {
+        await refreshPermissionsAndUpdateHotkeys(promptForSystemDialogs: false)
     }
 
     var missingPermissions: [AppPermissionKind] {
@@ -194,11 +222,47 @@ final class VoiceInputAppModel: ObservableObject {
     }
 
     func handlePermissionAction(_ permission: AppPermissionKind) {
+        prepareSettingsWindow(tab: .permissions)
         let state = permissionCoordinator.state(for: permission)
+        if permission == .accessibility {
+            _ = permissionCoordinator.refreshAccessibility(prompt: true)
+            openSystemSettings(for: permission)
+            Task {
+                try? await Task.sleep(for: .milliseconds(500))
+                await refreshPermissionsAndUpdateHotkeys(promptForSystemDialogs: false)
+            }
+            return
+        }
+
+        if permission == .inputMonitoring {
+            _ = permissionCoordinator.refreshInputMonitoring(prompt: true)
+            openSystemSettings(for: permission)
+            Task {
+                try? await Task.sleep(for: .milliseconds(500))
+                await refreshPermissionsAndUpdateHotkeys(promptForSystemDialogs: false)
+            }
+            return
+        }
+
         if permission.canPromptInApp && state == .notDetermined {
-            requestPermissions()
+            // 只请求当前这个权限
+            Task {
+                switch permission {
+                case .microphone:
+                    _ = await permissionCoordinator.refreshMicrophone(prompt: true)
+                case .speechRecognition:
+                    _ = await permissionCoordinator.refreshSpeechRecognition(prompt: true)
+                case .accessibility:
+                    _ = permissionCoordinator.refreshAccessibility(prompt: true)
+                case .inputMonitoring:
+                    _ = permissionCoordinator.refreshInputMonitoring(prompt: true)
+                }
+                await refreshPermissionsAndUpdateHotkeys(promptForSystemDialogs: false)
+                showSettingsWindow(tab: .permissions)
+            }
         } else {
             openSystemSettings(for: permission)
+            prepareSettingsWindow(tab: .permissions)
         }
     }
 
@@ -222,6 +286,51 @@ final class VoiceInputAppModel: ObservableObject {
             window.contentView?.needsDisplay = true
         }
         appearanceRevision = UUID()
+    }
+
+    private func refreshPermissionsAndUpdateHotkeys(promptForSystemDialogs: Bool) async {
+        await permissionCoordinator.refreshAll(promptForSystemDialogs: promptForSystemDialogs)
+        updateHotkeyMonitoring()
+    }
+
+    private func updateHotkeyMonitoring() {
+        if hotkeyPermissionsReady {
+            hotkeyManager.start()
+        } else {
+            hotkeyManager.stop()
+        }
+    }
+
+    private func reloadHotkeysIfReady() {
+        if hotkeyPermissionsReady {
+            hotkeyManager.reloadConfiguration()
+        } else {
+            hotkeyManager.stop()
+        }
+    }
+
+    private var hotkeyPermissionsReady: Bool {
+        permissionCoordinator.inputMonitoring.isUsable && permissionCoordinator.accessibility.isUsable
+    }
+
+    private func openSettingsWindowIfPermissionsAreMissing() {
+        guard hasMissingPermissions else { return }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            guard let self, self.hasMissingPermissions else { return }
+            self.showSettingsWindow(tab: .permissions)
+        }
+    }
+
+    private func openFirstAvailableSystemSettingsURL(_ urlStrings: [String]) {
+        for urlString in urlStrings {
+            guard let url = URL(string: urlString), NSWorkspace.shared.open(url) else {
+                continue
+            }
+            return
+        }
+
+        NSWorkspace.shared.launchApplication("System Settings")
     }
 
     private func beginCaptureUsingHoldHotkey() async {

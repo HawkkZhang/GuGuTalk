@@ -4,7 +4,7 @@ import Foundation
 @MainActor
 final class PreviewState: ObservableObject {
     @Published var isVisible = false
-    @Published var title = "桌面语音输入"
+    @Published var title = "GuGuTalk"
     @Published var message = "按住或按一下快捷键开始说话"
     @Published var transcript = ""
     @Published var hintMessage: String?
@@ -22,7 +22,7 @@ final class PreviewState: ObservableObject {
     }
 
     func resetToIdle() {
-        title = "桌面语音输入"
+        title = "GuGuTalk"
         message = "按住或按一下快捷键开始说话"
         transcript = ""
         hintMessage = nil

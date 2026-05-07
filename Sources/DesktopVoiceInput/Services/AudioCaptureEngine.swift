@@ -8,6 +8,18 @@ final class AudioCaptureEngine {
     private var audioConverter: AVAudioConverter?
     private let targetFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16_000, channels: 1, interleaved: false)!
     private var audioHandler: AudioHandler?
+    private var isPrewarmed = false
+
+    /// 预热音频引擎，减少首次启动延迟
+    /// 注意：只有在麦克风权限已授予后才能调用
+    func prewarm() {
+        guard !isPrewarmed else { return }
+        guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else { return }
+        let inputNode = audioEngine.inputNode
+        _ = inputNode.outputFormat(forBus: 0)
+        audioEngine.prepare()
+        isPrewarmed = true
+    }
 
     func startCapture(handler: @escaping AudioHandler) throws {
         stopCapture()
@@ -37,8 +49,10 @@ final class AudioCaptureEngine {
             }
         }
 
-        audioEngine.prepare()
-        try audioEngine.start()
+        if !audioEngine.isRunning {
+            audioEngine.prepare()
+            try audioEngine.start()
+        }
     }
 
     func stopCapture() {

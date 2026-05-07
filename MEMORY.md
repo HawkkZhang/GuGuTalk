@@ -1,5 +1,52 @@
 # Project Memory
 
+## ⚠️ CRITICAL STATUS - 2026-05-07
+
+**权限流程曾导致应用不可用。Codex 已做一轮修复并通过 Release 编译，已安装到 `/Applications/GuGuTalk.app`，仍需用户本机人工验证权限弹窗与授权刷新。**
+
+### 严重问题
+
+1. **语音识别权限申请导致闪退**
+   - 症状：点击"立即申请"按钮后应用崩溃
+   - 影响：无法完成权限配置流程
+   - 位置：`PermissionCoordinator.refreshSpeechRecognition(prompt: true)`
+   - 当前处理：权限请求显式在主线程发起，并在主线程恢复结果
+
+2. **启动时错误弹出权限请求**
+   - 症状：应用启动后立即弹出系统辅助功能权限对话框
+   - 期望：应该先显示设置窗口，用户主动点击后才请求
+   - 影响：用户体验混乱，不知道应该做什么
+   - 当前处理：启动只做静默检查；全局热键监听仅在输入监控已授权时启动；缺权限时自动打开设置窗口
+
+3. **权限检测不准确**
+   - 症状：系统设置中已授权，应用仍显示"未授权"
+   - 已定位：辅助功能/输入监控需要稳定签名和正确跳转；麦克风在 Hardened Runtime 下还必须具备 `com.apple.security.device.audio-input` entitlement
+   - 当前处理：Release 构建使用本地稳定签名 `GuGuTalk Local Code Signing`；新增 `Config/DesktopVoiceInput.entitlements`；刷新检查统一走 AppModel，刷新权限后同步热键状态
+   - 状态：需要用户验证修复是否有效
+
+### 最近的修改（2026-05-07）
+
+**打包和品牌**：
+- 应用名改为 GuGuTalk
+- 创建 DMG 安装包
+- 添加应用图标和菜单栏图标
+- 移除 `LSUIElement`，应用出现在 Launchpad
+
+**权限系统修改**：
+- 启用 Hardened Runtime（尝试修复权限检测）
+- 启用代码签名（现为本地稳定证书 `GuGuTalk Local Code Signing`，不再依赖 ad-hoc）
+- 添加 `Config/DesktopVoiceInput.entitlements`，包含麦克风音频输入 entitlement
+- 移除自动打开设置窗口逻辑（导致问题 2）
+- 添加"刷新检查"按钮
+- 曾添加"我已授权，继续使用"按钮（已移除）
+
+**已知问题根源**：
+- 权限请求流程混乱
+- 错误处理缺失
+- UI 流程不清晰
+
+详细问题记录见 `BUGS.md`
+
 ## Current Status
 
 - DesktopVoiceInput is a macOS menu bar voice input app prototype.

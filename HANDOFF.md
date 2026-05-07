@@ -2,6 +2,28 @@
 
 This file is the first-stop handoff note for switching between Codex, Claude Code, Xcode, and other development tools.
 
+## ⚠️ CRITICAL ISSUES - 2026-05-07
+
+**权限流程曾导致应用处于不可用状态。Codex 已做一轮修复并通过 Release 编译，已安装到 `/Applications/GuGuTalk.app`，仍需用户本机人工验证。**
+
+1. **申请语音识别权限导致闪退**
+   - 点击"语音识别"的"立即申请"按钮后应用崩溃
+   - 位置：`PermissionCoordinator.refreshSpeechRecognition(prompt: true)`
+   - 已处理：权限请求显式在主线程发起，并在主线程恢复结果
+
+2. **启动时自动弹出权限请求对话框**
+   - 应用启动后直接弹出系统辅助功能权限请求
+   - 期望：应该先打开设置窗口，让用户主动点击后才请求
+   - 已处理：启动只做静默权限检查；全局热键监听仅在输入监控已授权时启动；缺权限时自动打开设置窗口
+
+3. **权限检测不准确**
+   - 用户在系统设置中授予权限后，应用仍显示"未授权"
+   - 已定位：麦克风权限缺失的真实原因是 Hardened Runtime 下应用缺少 `com.apple.security.device.audio-input` entitlement，导致系统麦克风权限列表不出现 GuGuTalk
+   - 已处理：Release 构建使用本地稳定签名 `GuGuTalk Local Code Signing`；新增 `Config/DesktopVoiceInput.entitlements`；刷新检查统一走 AppModel，刷新权限后同步热键监听状态
+   - 需要验证修复是否有效
+
+**详细问题记录见 `BUGS.md`**
+
 ## Current Stable Point
 
 - Stable tag: `stable-2026-05-01`
@@ -56,6 +78,7 @@ The app currently has:
 - floating preview overlay
 - post-processing and insertion pipeline
 - design documentation and project memory
+- local Release install at `/Applications/GuGuTalk.app`, signed with `GuGuTalk Local Code Signing`
 
 The most recent UI direction is:
 
@@ -70,6 +93,7 @@ The most recent UI direction is:
 
 ## Known Risks
 
+- The locally signed `/Applications/GuGuTalk.app` is for development testing. It may still be blocked by Gatekeeper when double-clicked because the certificate is self-signed; launching via `/Applications/GuGuTalk.app/Contents/MacOS/DesktopVoiceInput` is currently the most reliable local test path.
 - Do not assume hotkeys are fully stable. Dual hotkey mode still needs testing and polish.
 - Do not let shortcut recording trigger live voice input.
 - Do not let recognized text insert into the app's own settings or internal UI.

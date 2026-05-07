@@ -8,6 +8,11 @@ struct SettingsView: View {
     @State private var toggleHotkeyFeedback: HotkeyValidationIssue?
     @State private var replacementFrom: String = ""
     @State private var replacementTo: String = ""
+    @State private var isDoubaoConfigExpanded = false
+    @State private var isQwenConfigExpanded = false
+    @State private var isAddingCustomMode = false
+    @State private var newModeName: String = ""
+    @State private var newModePrompt: String = ""
     @Namespace private var sidebarAnimation
 
     private let ready = DVITheme.ready
@@ -23,7 +28,22 @@ struct SettingsView: View {
         .foregroundStyle(DVITheme.ink)
         .tint(DVITheme.accent)
         .environment(\.controlActiveState, .active)
-        .onAppear { bringSettingsWindowForward() }
+        .onAppear {
+            selectedTab = appModel.requestedSettingsTab
+            bringSettingsWindowForward()
+            // 检测是否已配置，如果未配置则自动展开
+            isDoubaoConfigExpanded = appModel.settings.doubaoAppID.isEmpty || appModel.settings.doubaoAccessKey.isEmpty
+            isQwenConfigExpanded = appModel.settings.qwenAPIKey.isEmpty
+        }
+        .onChange(of: appModel.requestedSettingsTab) { tab in
+            withAnimation(.easeOut(duration: 0.2)) {
+                selectedTab = tab
+            }
+            bringSettingsWindowForward()
+        }
+        .onChange(of: appModel.settingsFocusRequest) { _ in
+            bringSettingsWindowForward()
+        }
     }
 
     // MARK: - Sidebar
@@ -138,38 +158,78 @@ struct SettingsView: View {
                 if appModel.settings.preferredMode == .doubao {
                     Divider()
                     providerStatus(mode: .doubao, isConfigured: appModel.settings.recognitionConfig.doubaoCredentials.isConfigured)
-                    providerField(label: "App ID", text: $appModel.settings.doubaoAppID, secure: false)
-                    providerField(label: "Access Token", text: $appModel.settings.doubaoAccessKey, secure: true)
-                    providerField(label: "Resource ID", text: $appModel.settings.doubaoResourceID, secure: false)
-                    providerField(label: "Endpoint", text: $appModel.settings.doubaoEndpoint, secure: false)
+
+                    DisclosureGroup(isExpanded: $isDoubaoConfigExpanded) {
+                        VStack(spacing: 12) {
+                            providerField(label: "App ID", text: $appModel.settings.doubaoAppID, secure: false)
+                            providerField(label: "Access Token", text: $appModel.settings.doubaoAccessKey, secure: true)
+                            providerField(label: "Resource ID", text: $appModel.settings.doubaoResourceID, secure: false)
+                            providerField(label: "Endpoint", text: $appModel.settings.doubaoEndpoint, secure: false)
+                        }
+                        .padding(.top, 8)
+                    } label: {
+                        HStack {
+                            Image(systemName: "gearshape")
+                                .font(.system(size: 12))
+                                .foregroundStyle(DVITheme.accent)
+                            Text("配置参数")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(DVITheme.ink)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
                 }
 
                 if appModel.settings.preferredMode == .qwen {
                     Divider()
                     providerStatus(mode: .qwen, isConfigured: appModel.settings.recognitionConfig.qwenCredentials.isConfigured)
-                    providerField(label: "API Key", text: $appModel.settings.qwenAPIKey, secure: true)
-                    providerField(label: "Model", text: $appModel.settings.qwenModel, secure: false)
-                    providerField(label: "Endpoint", text: $appModel.settings.qwenEndpoint, secure: false)
+
+                    DisclosureGroup(isExpanded: $isQwenConfigExpanded) {
+                        VStack(spacing: 12) {
+                            providerField(label: "API Key", text: $appModel.settings.qwenAPIKey, secure: true)
+                            providerField(label: "Model", text: $appModel.settings.qwenModel, secure: false)
+                            providerField(label: "Endpoint", text: $appModel.settings.qwenEndpoint, secure: false)
+                        }
+                        .padding(.top, 8)
+                    } label: {
+                        HStack {
+                            Image(systemName: "gearshape")
+                                .font(.system(size: 12))
+                                .foregroundStyle(DVITheme.accent)
+                            Text("配置参数")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(DVITheme.ink)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
                 }
             }
             .animation(.easeOut(duration: 0.2), value: appModel.settings.preferredMode)
 
             SectionHeader("快捷键")
-            SettingsPanel {
-                hotkeyRecorderSection(
-                    slot: .holdToTalk,
+            HStack(alignment: .top, spacing: 12) {
+                hotkeyModeCard(
+                    title: "按住说话",
+                    description: "按住快捷键说话，松开后插入文本",
+                    icon: "hand.tap",
                     hotkey: $appModel.settings.holdToTalkHotkey,
                     isEnabled: $appModel.settings.holdToTalkEnabled,
                     feedback: $holdHotkeyFeedback,
-                    accent: DVITheme.accent
+                    slot: .holdToTalk,
+                    otherHotkey: appModel.settings.toggleToTalkHotkey
                 )
-                Divider()
-                hotkeyRecorderSection(
-                    slot: .toggleToTalk,
+
+                hotkeyModeCard(
+                    title: "按一下说话",
+                    description: "按一下开始，再按一下结束",
+                    icon: "circle.circle",
                     hotkey: $appModel.settings.toggleToTalkHotkey,
                     isEnabled: $appModel.settings.toggleToTalkEnabled,
                     feedback: $toggleHotkeyFeedback,
-                    accent: DVITheme.accent
+                    slot: .toggleToTalk,
+                    otherHotkey: appModel.settings.holdToTalkHotkey
                 )
             }
 
@@ -192,9 +252,9 @@ struct SettingsView: View {
 
     private var postProcessingContent: some View {
         VStack(alignment: .leading, spacing: 24) {
-            SectionHeader("标点")
-            settingsRow(label: "标点处理") {
-                Picker("标点", selection: $appModel.settings.punctuationMode) {
+            SectionHeader("标点处理")
+            SettingsPanel {
+                Picker("标点处理", selection: $appModel.settings.punctuationMode) {
                     ForEach(PunctuationMode.allCases) { mode in
                         Text(mode.title).tag(mode)
                     }
@@ -202,7 +262,6 @@ struct SettingsView: View {
                 .labelsHidden()
                 .pickerStyle(.segmented)
                 .tint(DVITheme.accent)
-                .frame(width: 280)
             }
 
             SectionHeader("文本替换")
@@ -271,33 +330,76 @@ struct SettingsView: View {
                         Text("处理模式")
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(DVITheme.secondaryInk)
-                        HStack(spacing: 6) {
+                        Picker("处理模式", selection: Binding(
+                            get: { appModel.settings.postProcessingPreset ?? .removeFillers },
+                            set: {
+                                appModel.settings.postProcessingPreset = $0
+                                appModel.settings.selectedCustomModeName = nil
+                            }
+                        )) {
                             ForEach(PostProcessingPreset.allCases) { preset in
-                                presetButton(preset)
+                                Text(preset.title).tag(preset)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .tint(DVITheme.accent)
+                    }
+
+                    // 自定义模式列表
+                    if !appModel.settings.customModes.isEmpty {
+                        Divider()
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("自定义")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(DVITheme.secondaryInk)
+
+                            ForEach(appModel.settings.customModes) { mode in
+                                HStack(spacing: 8) {
+                                    Button {
+                                        appModel.settings.selectedCustomModeName = mode.name
+                                        appModel.settings.postProcessingPreset = nil
+                                    } label: {
+                                        Text(mode.name)
+                                            .font(.system(size: 12, weight: .medium))
+                                            .foregroundStyle(appModel.settings.selectedCustomModeName == mode.name ? .white : DVITheme.ink)
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 5)
+                                            .background(
+                                                appModel.settings.selectedCustomModeName == mode.name
+                                                    ? DVITheme.accent
+                                                    : DVITheme.control,
+                                                in: DVITheme.controlShape()
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    Spacer()
+
+                                    Button {
+                                        appModel.settings.removeCustomMode(name: mode.name)
+                                    } label: {
+                                        Image(systemName: "xmark")
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(DVITheme.tertiaryInk)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                             }
                         }
                     }
 
-                    if let preset = appModel.settings.postProcessingPreset {
+                    // 选中自定义模式时显示 prompt 编辑
+                    if let customName = appModel.settings.selectedCustomModeName,
+                       let mode = appModel.settings.customModes.first(where: { $0.name == customName }) {
                         Divider()
                         VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text("Prompt")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundStyle(DVITheme.secondaryInk)
-                                Spacer()
-                                if !appModel.settings.customPrompt(for: preset).isEmpty {
-                                    Button("恢复默认") {
-                                        appModel.settings.setCustomPrompt("", for: preset)
-                                    }
-                                    .font(.system(size: 11))
-                                    .buttonStyle(.plain)
-                                    .foregroundStyle(DVITheme.accent)
-                                }
-                            }
+                            Text("Prompt")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(DVITheme.secondaryInk)
                             TextEditor(text: Binding(
-                                get: { appModel.settings.effectivePrompt(for: preset) },
-                                set: { appModel.settings.setCustomPrompt($0, for: preset) }
+                                get: { mode.prompt },
+                                set: { appModel.settings.updateCustomMode(name: customName, prompt: $0) }
                             ))
                             .font(.system(size: 12))
                             .frame(height: 72)
@@ -306,6 +408,60 @@ struct SettingsView: View {
                             .background(DVITheme.control, in: RoundedRectangle(cornerRadius: 6))
                             .overlay(RoundedRectangle(cornerRadius: 6).stroke(DVITheme.separator.opacity(0.3), lineWidth: 1))
                         }
+                    }
+
+                    // 添加自定义模式
+                    Divider()
+                    if isAddingCustomMode {
+                        VStack(alignment: .leading, spacing: 8) {
+                            TextField("模式名称", text: $newModeName)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(size: 12))
+                            TextEditor(text: $newModePrompt)
+                                .font(.system(size: 12))
+                                .frame(height: 60)
+                                .scrollContentBackground(.hidden)
+                                .padding(6)
+                                .background(DVITheme.control, in: RoundedRectangle(cornerRadius: 6))
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(DVITheme.separator.opacity(0.3), lineWidth: 1))
+                            HStack {
+                                Button("添加") {
+                                    let name = newModeName.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    let prompt = newModePrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    guard !name.isEmpty, !prompt.isEmpty else { return }
+                                    appModel.settings.addCustomMode(name: name, prompt: prompt)
+                                    appModel.settings.selectedCustomModeName = name
+                                    appModel.settings.postProcessingPreset = nil
+                                    newModeName = ""
+                                    newModePrompt = ""
+                                    isAddingCustomMode = false
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.small)
+                                .disabled(newModeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || newModePrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                                Button("取消") {
+                                    newModeName = ""
+                                    newModePrompt = ""
+                                    isAddingCustomMode = false
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            }
+                        }
+                    } else {
+                        Button {
+                            isAddingCustomMode = true
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "plus.circle")
+                                    .font(.system(size: 12))
+                                Text("添加自定义模式")
+                                    .font(.system(size: 12))
+                            }
+                            .foregroundStyle(DVITheme.accent)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -342,46 +498,11 @@ struct SettingsView: View {
 
     private var permissionsContent: some View {
         VStack(alignment: .leading, spacing: 24) {
-            if appModel.hasMissingPermissions {
-                PermissionGuideView(appModel: appModel, compact: false)
-            }
-            SectionHeader("权限状态")
-            SettingsPanel {
-                VStack(spacing: 2) {
-                    permissionRow(permission: .microphone, state: appModel.permissionCoordinator.microphone)
-                    permissionRow(permission: .speechRecognition, state: appModel.permissionCoordinator.speechRecognition)
-                    permissionRow(permission: .accessibility, state: appModel.permissionCoordinator.accessibility)
-                    permissionRow(permission: .inputMonitoring, state: appModel.permissionCoordinator.inputMonitoring)
-                }
-                HStack(spacing: 10) {
-                    if appModel.hasMissingPermissions {
-                        Button("请求缺失权限") { appModel.requestPermissions() }.buttonStyle(.borderedProminent)
-                    } else {
-                        Button("刷新状态") { Task { await appModel.permissionCoordinator.refreshAll(promptForSystemDialogs: false) } }.buttonStyle(.bordered)
-                    }
-                    Button("打开系统设置") { appModel.openSystemSettings() }.buttonStyle(.bordered)
-                }
-                .padding(.top, 4)
-            }
+            PermissionGuideView(appModel: appModel, compact: false)
         }
     }
 
     // MARK: - Helpers
-
-    private func presetButton(_ preset: PostProcessingPreset) -> some View {
-        let sel = appModel.settings.postProcessingPreset == preset
-        return Button {
-            withAnimation(.easeOut(duration: 0.15)) { appModel.settings.postProcessingPreset = sel ? nil : preset }
-        } label: {
-            Text(preset.title).font(.system(size: 12, weight: .medium))
-                .padding(.horizontal, 12).padding(.vertical, 5)
-                .background(sel ? DVITheme.stateFill(DVITheme.accent, emphasized: true) : DVITheme.control, in: DVITheme.controlShape())
-                .overlay(DVITheme.controlShape().stroke(sel ? DVITheme.stateStroke(DVITheme.accent, emphasized: true) : DVITheme.separator.opacity(0.3), lineWidth: 1))
-                .foregroundStyle(sel ? DVITheme.accent : DVITheme.ink)
-                .scaleEffect(sel ? 1.02 : 1.0)
-        }
-        .buttonStyle(.plain).animation(.easeOut(duration: 0.12), value: sel)
-    }
 
     private func addReplacement() {
         let f = replacementFrom.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -398,14 +519,140 @@ struct SettingsView: View {
         }.padding(.bottom, 2)
     }
 
+    private func hotkeyModeCard(
+        title: String,
+        description: String,
+        icon: String,
+        hotkey: Binding<HotkeyConfiguration>,
+        isEnabled: Binding<Bool>,
+        feedback: Binding<HotkeyValidationIssue?>,
+        slot: HotkeySlot,
+        otherHotkey: HotkeyConfiguration
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 16))
+                    .foregroundStyle(DVITheme.accent)
+                    .frame(width: 20)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(DVITheme.ink)
+
+                    Text(description)
+                        .font(.system(size: 11))
+                        .foregroundStyle(DVITheme.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Toggle("", isOn: isEnabled)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .tint(DVITheme.accent)
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                HotkeyRecorderButton(
+                    appModel: appModel,
+                    hotkey: hotkey,
+                    feedback: feedback,
+                    validation: { appModel.settings.validationIssue(for: slot, candidate: $0) },
+                    accent: DVITheme.accent
+                )
+                .disabled(!isEnabled.wrappedValue)
+                .opacity(isEnabled.wrappedValue ? 1 : 0.48)
+
+                // 实时显示冲突和警告
+                let conflictInfo = hotkey.wrappedValue.conflictInfo(comparing: otherHotkey)
+                if conflictInfo.severity != .none {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: conflictInfo.severity == .error ? "exclamationmark.triangle.fill" : "info.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(conflictInfo.severity == .error ? DVITheme.caution : .blue)
+                            .padding(.top, 1)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            if let title = conflictInfo.title {
+                                Text(title)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(conflictInfo.severity == .error ? DVITheme.caution : .blue)
+                            }
+                            ForEach(conflictInfo.details, id: \.self) { detail in
+                                Text(detail)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(DVITheme.secondaryInk)
+                            }
+                        }
+                    }
+                    .padding(8)
+                    .background(
+                        (conflictInfo.severity == .error ? DVITheme.caution : Color.blue).opacity(0.08),
+                        in: RoundedRectangle(cornerRadius: 6)
+                    )
+                }
+
+                if let issue = feedback.wrappedValue {
+                    HStack(spacing: 6) {
+                        Image(systemName: issue.severity == .error ? "exclamationmark.triangle.fill" : "info.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(issue.severity == .error ? DVITheme.caution : .orange)
+                        Text(issue.message)
+                            .font(.system(size: 10))
+                            .foregroundStyle(DVITheme.secondaryInk)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(8)
+                    .background(
+                        (issue.severity == .error ? DVITheme.caution : Color.orange).opacity(0.08),
+                        in: RoundedRectangle(cornerRadius: 6)
+                    )
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(DVITheme.control, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(DVITheme.separator.opacity(0.5), lineWidth: 1)
+        )
+    }
+
     private func hotkeyRecorderSection(slot: HotkeySlot, hotkey: Binding<HotkeyConfiguration>, isEnabled: Binding<Bool>, feedback: Binding<HotkeyValidationIssue?>, accent: Color) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(slot.title).font(.system(size: 13, weight: .medium)).foregroundStyle(isEnabled.wrappedValue ? DVITheme.ink : DVITheme.secondaryInk)
+            Text(slot.title)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(isEnabled.wrappedValue ? DVITheme.ink : DVITheme.secondaryInk)
+
             Spacer()
-            Toggle("", isOn: isEnabled).labelsHidden().toggleStyle(.switch).tint(accent)
-            HotkeyRecorderButton(appModel: appModel, hotkey: hotkey, feedback: feedback, validation: { appModel.settings.validationIssue(for: slot, candidate: $0) }, accent: accent)
-                .disabled(!isEnabled.wrappedValue).opacity(isEnabled.wrappedValue ? 1 : 0.48)
-        }.padding(.vertical, 2)
+
+            Toggle("", isOn: isEnabled)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .tint(accent)
+
+            HotkeyRecorderButton(
+                appModel: appModel,
+                hotkey: hotkey,
+                feedback: feedback,
+                validation: { appModel.settings.validationIssue(for: slot, candidate: $0) },
+                accent: accent
+            )
+            .disabled(!isEnabled.wrappedValue)
+            .opacity(isEnabled.wrappedValue ? 1 : 0.48)
+
+            HotkeyConflictIndicator(
+                hotkey: hotkey.wrappedValue,
+                otherHotkey: slot == .holdToTalk ? appModel.settings.toggleToTalkHotkey : appModel.settings.holdToTalkHotkey
+            )
+        }
+        .padding(.vertical, 2)
     }
 
     private func providerField(label: String, text: Binding<String>, secure: Bool) -> some View {
@@ -453,7 +700,7 @@ struct SettingsView: View {
 
 // MARK: - Types
 
-private enum SettingsTab: CaseIterable {
+enum SettingsTab: CaseIterable {
     case general, postProcessing, permissions
     var title: String {
         switch self { case .general: "常用"; case .postProcessing: "后处理"; case .permissions: "权限" }
@@ -490,41 +737,339 @@ private struct HotkeyRecorderButton: View {
     let accent: Color
     @State private var isRecording = false
     @State private var monitor: Any?
-    @State private var livePreview = "等待按键"
+    @State private var liveModifiers: NSEvent.ModifierFlags = []
+    @State private var liveKeyCode: UInt16? = nil
+    @State private var shakeOffset: CGFloat = 0
+    @State private var isRejected = false
+    @State private var capturedHotkey: HotkeyConfiguration?
 
     var body: some View {
-        HStack(spacing: 8) {
-            Text(isRecording ? livePreview : hotkey.displayName)
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .foregroundStyle(isRecording ? accent : DVITheme.ink)
-                .padding(.horizontal, 10).padding(.vertical, 5).frame(minWidth: 88)
-                .background(isRecording ? DVITheme.stateFill(accent, emphasized: true) : DVITheme.control, in: DVITheme.controlShape())
-                .overlay(DVITheme.controlShape().stroke(isRecording ? DVITheme.stateStroke(accent, emphasized: true) : DVITheme.separator.opacity(0.42), lineWidth: 1))
+        Button {
             if isRecording {
-                Button { stopRecording() } label: { Label("停止", systemImage: "stop.fill") }.buttonStyle(.borderedProminent)
+                stopRecording()
             } else {
-                Button { startRecording() } label: { Label("录制", systemImage: "keyboard") }.buttonStyle(.bordered)
+                startRecording()
             }
+        } label: {
+            HStack(spacing: 6) {
+                if isRecording {
+                    LiveHotkeyDisplay(modifiers: liveModifiers, keyCode: liveKeyCode, accent: accent, isRejected: isRejected)
+                } else {
+                    HotkeyDisplay(hotkey: hotkey)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .frame(minWidth: 140)
         }
+        .buttonStyle(.plain)
+        .background(isRecording ? DVITheme.stateFill(accent, emphasized: true) : DVITheme.control, in: DVITheme.controlShape())
+        .overlay(DVITheme.controlShape().stroke(isRecording ? DVITheme.stateStroke(accent, emphasized: true) : DVITheme.separator.opacity(0.42), lineWidth: 1))
+        .offset(x: shakeOffset)
         .animation(.easeOut(duration: 0.16), value: isRecording)
         .onDisappear { stopRecording() }
     }
 
     private func startRecording() {
-        feedback = nil; livePreview = "按键中"; isRecording = true
-        appModel.suspendHotkeys(); NSApp.activate(ignoringOtherApps: true)
-        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
-            if event.type == .keyDown, event.keyCode == 53 { stopRecording(); return nil }
-            guard let captured = HotkeyConfiguration.capture(from: event) else { return nil }
-            livePreview = captured.displayName
-            if let issue = validation(captured), issue.severity == .error { feedback = issue; NSSound.beep(); stopRecording(); return nil }
-            hotkey = captured; feedback = validation(captured); stopRecording(); return nil
+        feedback = nil
+        isRejected = false
+        liveModifiers = []
+        liveKeyCode = nil
+        capturedHotkey = nil
+        isRecording = true
+        appModel.suspendHotkeys()
+        NSApp.activate(ignoringOtherApps: true)
+
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .flagsChanged]) { event in
+            if event.type == .keyDown {
+                if event.keyCode == 53 {
+                    stopRecording()
+                    return nil
+                }
+
+                liveKeyCode = event.keyCode
+                liveModifiers = event.modifierFlags.intersection([.command, .option, .control, .shift, .function])
+
+                // 捕获快捷键
+                if let captured = HotkeyConfiguration.capture(from: event) {
+                    if let issue = validation(captured), issue.severity == .error {
+                        // 被拒绝的按键：显示红色 + 抖动 + 蜂鸣音
+                        isRejected = true
+                        capturedHotkey = nil
+                        triggerShake()
+                        NSSound.beep()
+
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                            isRejected = false
+                            liveKeyCode = nil
+                            liveModifiers = []
+                        }
+                        return nil
+                    }
+
+                    // 保存捕获的快捷键，等待释放
+                    capturedHotkey = captured
+                }
+                return nil
+
+            } else if event.type == .keyUp {
+                // 主键释放
+                if event.keyCode == liveKeyCode {
+                    liveKeyCode = nil
+
+                    // 如果修饰键也都释放了，保存快捷键
+                    if liveModifiers.isEmpty, let captured = capturedHotkey {
+                        hotkey = captured
+                        feedback = validation(captured)
+                        stopRecording()
+                    }
+                }
+                return nil
+
+            } else if event.type == .flagsChanged {
+                let newModifiers = event.modifierFlags.intersection([.command, .option, .control, .shift, .function])
+
+                // 修饰键释放
+                if newModifiers.isEmpty {
+                    liveModifiers = []
+
+                    // 如果主键也释放了，保存快捷键
+                    if liveKeyCode == nil, let captured = capturedHotkey {
+                        hotkey = captured
+                        feedback = validation(captured)
+                        stopRecording()
+                    }
+                } else {
+                    liveModifiers = newModifiers
+
+                    // 捕获修饰键作为单键
+                    if let captured = HotkeyConfiguration.capture(from: event) {
+                        if let issue = validation(captured), issue.severity == .error {
+                            isRejected = true
+                            capturedHotkey = nil
+                            triggerShake()
+                            NSSound.beep()
+
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                                isRejected = false
+                                liveKeyCode = nil
+                                liveModifiers = []
+                            }
+                            return nil
+                        }
+
+                        // 立即保存捕获的修饰键，等待释放
+                        capturedHotkey = captured
+                    }
+                }
+                return nil
+            }
+            return nil
         }
     }
 
     private func stopRecording() {
-        isRecording = false; appModel.resumeHotkeys()
-        if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
+        isRecording = false
+        isRejected = false
+        liveModifiers = []
+        liveKeyCode = nil
+        capturedHotkey = nil
+        appModel.resumeHotkeys()
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+            self.monitor = nil
+        }
+    }
+
+    private func triggerShake() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.3)) {
+            shakeOffset = 10
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.3)) {
+                shakeOffset = -10
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.3)) {
+                shakeOffset = 5
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.3)) {
+                shakeOffset = 0
+            }
+        }
+    }
+}
+
+private struct HotkeyDisplay: View {
+    let hotkey: HotkeyConfiguration
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(Array(hotkey.keyComponents.enumerated()), id: \.offset) { index, key in
+                KeyCapView(label: key, isActive: false)
+                if index < hotkey.keyComponents.count - 1 {
+                    Text("+")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(DVITheme.tertiaryInk)
+                }
+            }
+        }
+    }
+}
+
+private struct LiveHotkeyDisplay: View {
+    let modifiers: NSEvent.ModifierFlags
+    let keyCode: UInt16?
+    let accent: Color
+    let isRejected: Bool
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if modifiers.contains(.control) {
+                KeyCapView(label: "⌃", isActive: true, accent: isRejected ? .red : accent)
+                Text("+").font(.system(size: 10, weight: .medium)).foregroundStyle(isRejected ? .red : accent)
+            }
+            if modifiers.contains(.option) {
+                KeyCapView(label: "⌥", isActive: true, accent: isRejected ? .red : accent)
+                Text("+").font(.system(size: 10, weight: .medium)).foregroundStyle(isRejected ? .red : accent)
+            }
+            if modifiers.contains(.shift) {
+                KeyCapView(label: "⇧", isActive: true, accent: isRejected ? .red : accent)
+                Text("+").font(.system(size: 10, weight: .medium)).foregroundStyle(isRejected ? .red : accent)
+            }
+            if modifiers.contains(.command) {
+                KeyCapView(label: "⌘", isActive: true, accent: isRejected ? .red : accent)
+                Text("+").font(.system(size: 10, weight: .medium)).foregroundStyle(isRejected ? .red : accent)
+            }
+            if modifiers.contains(.function) {
+                KeyCapView(label: "fn", isActive: true, accent: isRejected ? .red : accent)
+                if keyCode != nil {
+                    Text("+").font(.system(size: 10, weight: .medium)).foregroundStyle(isRejected ? .red : accent)
+                }
+            }
+
+            if let keyCode {
+                let keyName = HotkeyFormatter.displayName(forKeyCode: keyCode, modifiers: [])
+                KeyCapView(label: keyName, isActive: true, accent: isRejected ? .red : accent)
+            } else if modifiers.isEmpty {
+                Text("按下按键...")
+                    .font(.system(size: 11))
+                    .foregroundStyle(DVITheme.secondaryInk)
+            }
+        }
+    }
+}
+
+private struct KeyCapView: View {
+    let label: String
+    var isActive: Bool = false
+    var accent: Color = .accentColor
+
+    var body: some View {
+        Text(label)
+            .font(.system(size: 11, weight: .semibold, design: .rounded))
+            .foregroundStyle(isActive ? accent : DVITheme.ink)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(
+                isActive
+                    ? accent.opacity(0.12)
+                    : DVITheme.control
+            )
+            .cornerRadius(4)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(
+                        isActive
+                            ? accent.opacity(0.4)
+                            : DVITheme.separator.opacity(0.3),
+                        lineWidth: 1
+                    )
+            )
+    }
+}
+
+private struct HotkeyConflictIndicator: View {
+    let hotkey: HotkeyConfiguration
+    let otherHotkey: HotkeyConfiguration?
+    @State private var showPopover = false
+
+    var conflictInfo: HotkeyConflictInfo {
+        hotkey.conflictInfo(comparing: otherHotkey)
+    }
+
+    var body: some View {
+        Group {
+            if conflictInfo.severity != .none {
+                Button {
+                    showPopover.toggle()
+                } label: {
+                    Image(systemName: iconName)
+                        .font(.system(size: 13))
+                        .foregroundStyle(iconColor)
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $showPopover, arrowEdge: .bottom) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if let title = conflictInfo.title {
+                            HStack(spacing: 6) {
+                                Image(systemName: iconName)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(iconColor)
+                                Text(title)
+                                    .font(.system(size: 13, weight: .semibold))
+                            }
+                        }
+
+                        if !conflictInfo.details.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                ForEach(conflictInfo.details, id: \.self) { detail in
+                                    HStack(alignment: .top, spacing: 6) {
+                                        Text("•")
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(DVITheme.secondaryInk)
+                                        Text(detail)
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(DVITheme.secondaryInk)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(12)
+                    .frame(maxWidth: 280)
+                }
+                .help(conflictInfo.title ?? "查看冲突详情")
+            } else {
+                Color.clear.frame(width: 0, height: 0)
+            }
+        }
+    }
+
+    private var iconName: String {
+        switch conflictInfo.severity {
+        case .error:
+            return "exclamationmark.triangle.fill"
+        case .warning:
+            return "info.circle.fill"
+        case .none:
+            return ""
+        }
+    }
+
+    private var iconColor: Color {
+        switch conflictInfo.severity {
+        case .error:
+            return DVITheme.caution
+        case .warning:
+            return .blue
+        case .none:
+            return .clear
+        }
     }
 }
 

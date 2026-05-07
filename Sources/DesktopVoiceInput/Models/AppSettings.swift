@@ -34,6 +34,8 @@ final class AppSettings: ObservableObject {
         static let postProcessingPreset = "postProcessingPreset"
         static let punctuationMode = "punctuationMode"
         static let customLLMPrompt = "customLLMPrompt_"
+        static let customPostProcessingModes = "customPostProcessingModes"
+        static let selectedCustomModeName = "selectedCustomModeName"
     }
 
     @Published var preferredMode: RecognitionMode {
@@ -139,8 +141,8 @@ final class AppSettings: ObservableObject {
             let modifiers = NSEvent.ModifierFlags(rawValue: UInt(defaults.integer(forKey: Keys.hotkeyModifiers)))
             self.holdToTalkHotkey = HotkeyConfiguration.make(keyCode: keyCode, modifiers: modifiers)
         } else {
-            let legacyPreset = HotkeyPreset(rawValue: defaults.string(forKey: Keys.hotkeyPreset) ?? "") ?? .optionSpace
-            self.holdToTalkHotkey = legacyPreset.configuration
+            // 默认：Fn 键
+            self.holdToTalkHotkey = HotkeyConfiguration.make(keyCode: 63, modifiers: [])
         }
         self.holdToTalkEnabled = defaults.object(forKey: Keys.holdToTalkEnabled) == nil
             ? true
@@ -150,7 +152,8 @@ final class AppSettings: ObservableObject {
             let modifiers = NSEvent.ModifierFlags(rawValue: UInt(defaults.integer(forKey: Keys.toggleToTalkHotkeyModifiers)))
             self.toggleToTalkHotkey = HotkeyConfiguration.make(keyCode: keyCode, modifiers: modifiers)
         } else {
-            self.toggleToTalkHotkey = HotkeyConfiguration.make(keyCode: 36, modifiers: [.option])
+            // 默认：⌥Space
+            self.toggleToTalkHotkey = HotkeyConfiguration.make(keyCode: 49, modifiers: [.option])
         }
         self.toggleToTalkEnabled = defaults.object(forKey: Keys.toggleToTalkEnabled) == nil
             ? true
@@ -176,6 +179,8 @@ final class AppSettings: ObservableObject {
         let presetRaw = defaults.string(forKey: Keys.postProcessingPreset) ?? ""
         self.postProcessingPreset = presetRaw.isEmpty ? nil : PostProcessingPreset(rawValue: presetRaw)
         self.punctuationMode = PunctuationMode(rawValue: defaults.string(forKey: Keys.punctuationMode) ?? "") ?? .keep
+        let customModeName = defaults.string(forKey: Keys.selectedCustomModeName) ?? ""
+        self.selectedCustomModeName = customModeName.isEmpty ? nil : customModeName
     }
 
     var llmProviderConfig: LLMProviderConfig {
@@ -199,6 +204,62 @@ final class AppSettings: ObservableObject {
     func effectivePrompt(for preset: PostProcessingPreset) -> String {
         let custom = customPrompt(for: preset)
         return custom.isEmpty ? preset.defaultPrompt : custom
+    }
+
+    // MARK: - Custom Post Processing Modes
+
+    @Published var selectedCustomModeName: String? {
+        didSet { defaults.set(selectedCustomModeName ?? "", forKey: Keys.selectedCustomModeName) }
+    }
+
+    var customModes: [CustomPostProcessingMode] {
+        get {
+            guard let data = defaults.data(forKey: Keys.customPostProcessingModes),
+                  let decoded = try? JSONDecoder().decode([CustomPostProcessingMode].self, from: data) else {
+                return []
+            }
+            return decoded
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            defaults.set(data, forKey: Keys.customPostProcessingModes)
+            objectWillChange.send()
+        }
+    }
+
+    func addCustomMode(name: String, prompt: String) {
+        var modes = customModes
+        modes.append(CustomPostProcessingMode(name: name, prompt: prompt))
+        customModes = modes
+    }
+
+    func removeCustomMode(name: String) {
+        var modes = customModes
+        modes.removeAll { $0.name == name }
+        customModes = modes
+        if selectedCustomModeName == name {
+            selectedCustomModeName = nil
+        }
+    }
+
+    func updateCustomMode(name: String, prompt: String) {
+        var modes = customModes
+        if let index = modes.firstIndex(where: { $0.name == name }) {
+            modes[index].prompt = prompt
+            customModes = modes
+        }
+    }
+
+    /// 当前生效的 LLM prompt（预设或自定义）
+    var activePostProcessingPrompt: String? {
+        if let customName = selectedCustomModeName,
+           let mode = customModes.first(where: { $0.name == customName }) {
+            return mode.prompt
+        }
+        if let preset = postProcessingPreset {
+            return effectivePrompt(for: preset)
+        }
+        return nil
     }
 
     var recognitionConfig: RecognitionConfig {
@@ -366,50 +427,164 @@ extension HotkeyConfiguration {
         case .keyDown:
             return make(keyCode: event.keyCode, modifiers: modifiers)
         case .flagsChanged:
-            guard event.keyCode == 63, modifiers.contains(.function) else { return nil }
-            return make(keyCode: 63, modifiers: [])
+            // 计算当前有多少个修饰键被按下
+            let activeModifiers = [
+                modifiers.contains(.control),
+                modifiers.contains(.option),
+                modifiers.contains(.command),
+                modifiers.contains(.shift),
+                modifiers.contains(.function)
+            ].filter { $0 }.count
+
+            // 如果有多个修饰键，捕获修饰键组合
+            if activeModifiers > 1 {
+                // 使用当前按下的修饰键的 keyCode，其他修饰键作为 modifiers
+                // 例如：Control + Option → keyCode = Option 的 keyCode, modifiers = [.control]
+                var otherModifiers = modifiers
+
+                // Fn 键
+                if event.keyCode == 63, modifiers.contains(.function) {
+                    otherModifiers.remove(.function)
+                    return make(keyCode: 63, modifiers: otherModifiers)
+                }
+
+                // Control 键
+                if (event.keyCode == 59 || event.keyCode == 62), modifiers.contains(.control) {
+                    otherModifiers.remove(.control)
+                    return make(keyCode: event.keyCode, modifiers: otherModifiers)
+                }
+
+                // Option 键
+                if (event.keyCode == 58 || event.keyCode == 61), modifiers.contains(.option) {
+                    otherModifiers.remove(.option)
+                    return make(keyCode: event.keyCode, modifiers: otherModifiers)
+                }
+
+                // Command 键
+                if (event.keyCode == 55 || event.keyCode == 54), modifiers.contains(.command) {
+                    otherModifiers.remove(.command)
+                    return make(keyCode: event.keyCode, modifiers: otherModifiers)
+                }
+
+                // Shift 键
+                if (event.keyCode == 56 || event.keyCode == 60), modifiers.contains(.shift) {
+                    otherModifiers.remove(.shift)
+                    return make(keyCode: event.keyCode, modifiers: otherModifiers)
+                }
+            }
+
+            // 单个修饰键作为单键
+            // Fn 键
+            if event.keyCode == 63, modifiers.contains(.function) {
+                return make(keyCode: 63, modifiers: [])
+            }
+
+            // Control 键（左右）
+            if (event.keyCode == 59 || event.keyCode == 62), modifiers.contains(.control) {
+                return make(keyCode: event.keyCode, modifiers: [])
+            }
+
+            // Option 键（左右）
+            if (event.keyCode == 58 || event.keyCode == 61), modifiers.contains(.option) {
+                return make(keyCode: event.keyCode, modifiers: [])
+            }
+
+            // Command 键（左右）
+            if (event.keyCode == 55 || event.keyCode == 54), modifiers.contains(.command) {
+                return make(keyCode: event.keyCode, modifiers: [])
+            }
+
+            // Shift 键（左右）
+            if (event.keyCode == 56 || event.keyCode == 60), modifiers.contains(.shift) {
+                return make(keyCode: event.keyCode, modifiers: [])
+            }
+
+            return nil
         default:
             return nil
         }
     }
 
     var validationIssue: HotkeyValidationIssue? {
-        if keyCode == 63, modifiers.isEmpty {
-            return HotkeyValidationIssue(severity: .warning, message: "单独使用 Fn 在部分键盘工具或系统设置下可能不稳定；如果你发现偶发失效，建议换成带修饰键的组合。")
-        }
+        // 允许的单键：修饰键 + 功能键 + Escape
+        let modifierKeys: Set<UInt16> = [
+            63,      // Fn
+            59, 62,  // Control (左右)
+            58, 61,  // Option (左右)
+            55, 54,  // Command (左右)
+            56, 60   // Shift (左右)
+        ]
 
-        if let reservedMessage = reservedSystemConflictMessage {
-            return HotkeyValidationIssue(severity: .error, message: reservedMessage)
-        }
+        let functionKeys: Set<UInt16> = [
+            122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111  // F1-F12
+        ]
 
-        if modifiers.isEmpty {
-            return HotkeyValidationIssue(severity: .warning, message: "单键快捷键会直接截获这个按键，平时打字时也会被它抢走；如果你想少一点误触，建议加一个修饰键。")
-        }
+        let specialKeys: Set<UInt16> = [
+            53  // Escape
+        ]
 
-        if modifiers == [.command] || modifiers == [.control] || modifiers == [.option] {
-            return HotkeyValidationIssue(severity: .warning, message: "这个组合在很多应用里都有快捷键，可能和别的软件冲突；如果发现按键无反应，换一个组合会更稳。")
+        let allowedSingleKeys = modifierKeys.union(functionKeys).union(specialKeys)
+
+        if modifiers.isEmpty && !allowedSingleKeys.contains(keyCode) {
+            // 禁止的单键，返回 error（不显示文本，只用动效）
+            return HotkeyValidationIssue(severity: .error, message: "")
         }
 
         return nil
     }
 
+    var keyComponents: [String] {
+        var components: [String] = []
+        if modifiers.contains(.control) { components.append("⌃") }
+        if modifiers.contains(.option) { components.append("⌥") }
+        if modifiers.contains(.shift) { components.append("⇧") }
+        if modifiers.contains(.command) { components.append("⌘") }
+        if modifiers.contains(.function) { components.append("fn") }
+
+        let keyName = HotkeyFormatter.displayName(forKeyCode: keyCode, modifiers: [])
+        components.append(keyName)
+
+        return components.isEmpty ? ["未设置"] : components
+    }
+
     private var reservedSystemConflictMessage: String? {
-        switch (keyCode, modifiers) {
-        case (49, [.command]):
-            return "⌘ Space 通常被系统保留给 Spotlight，建议换一个组合。"
-        case (49, [.control]):
-            return "⌃ Space 常被系统保留给输入法切换，建议换一个组合。"
-        case (48, [.command]):
-            return "⌘ Tab 是系统应用切换快捷键，不能拿来做语音输入热键。"
-        case (53, _):
-            return "Escape 不能作为语音输入热键。"
-        default:
-            return nil
+        // 移除所有限制，让用户自己测试
+        return nil
+    }
+
+    func conflictInfo(comparing other: HotkeyConfiguration?) -> HotkeyConflictInfo {
+        // 只检查内部冲突
+        if let other, self.keyCode == other.keyCode, self.modifiers == other.modifiers {
+            return HotkeyConflictInfo(
+                severity: .error,
+                title: "快捷键冲突",
+                details: ["长按说话和切换说话不能使用相同的快捷键"]
+            )
         }
+
+        // 移除单键警告，用户既然选择了就应该知道后果
+        return HotkeyConflictInfo(severity: .none, title: nil, details: [])
+    }
+
+    private func checkCommonAppConflicts() -> [String] {
+        // 不再猜测冲突
+        return []
     }
 }
 
-private enum HotkeyFormatter {
+struct HotkeyConflictInfo {
+    enum Severity {
+        case none
+        case warning
+        case error
+    }
+
+    let severity: Severity
+    let title: String?
+    let details: [String]
+}
+
+enum HotkeyFormatter {
     private static let keyLabels: [UInt16: String] = [
         0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X", 8: "C", 9: "V",
         11: "B", 12: "Q", 13: "W", 14: "E", 15: "R", 16: "Y", 17: "T", 18: "1", 19: "2", 20: "3",
@@ -418,7 +593,12 @@ private enum HotkeyFormatter {
         42: "\\", 43: ",", 44: "/", 45: "N", 46: "M", 47: ".", 49: "Space", 50: "`",
         36: "Return", 48: "Tab", 51: "Delete", 53: "Esc", 63: "Fn",
         122: "F1", 120: "F2", 99: "F3", 118: "F4", 96: "F5", 97: "F6", 98: "F7", 100: "F8",
-        101: "F9", 109: "F10", 103: "F11", 111: "F12", 123: "Left", 124: "Right", 125: "Down", 126: "Up"
+        101: "F9", 109: "F10", 103: "F11", 111: "F12", 123: "Left", 124: "Right", 125: "Down", 126: "Up",
+        // 修饰键
+        59: "⌃", 62: "⌃",  // Control (左右)
+        58: "⌥", 61: "⌥",  // Option (左右)
+        55: "⌘", 54: "⌘",  // Command (左右)
+        56: "⇧", 60: "⇧"   // Shift (左右)
     ]
 
     static func displayName(forKeyCode keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> String {

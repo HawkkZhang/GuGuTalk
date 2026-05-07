@@ -99,7 +99,7 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
                 uid: Host.current().localizedName ?? UUID().uuidString,
                 did: Host.current().localizedName ?? "macOS",
                 platform: "macOS",
-                sdkVersion: "DesktopVoiceInput/1.0",
+                sdkVersion: "GuGuTalk/1.0",
                 appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
             ),
             audio: .init(format: "pcm", codec: "raw", rate: Int(config.sampleRate), bits: 16, channel: 1, language: nil),
@@ -170,6 +170,16 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
         let code = json["code"] as? Int ?? json["status_code"] as? Int ?? -1
         let message = (json["message"] as? String) ?? (json["error"] as? String) ?? (json["msg"] as? String)
         if let message {
+            if hasRequestedFinish, !hasEmittedFinalResult {
+                let fallbackText = currentTranscriptPreview()
+                if !fallbackText.isEmpty {
+                    Self.logger.info("豆包返回错误但有部分结果，使用部分结果作为最终结果: \(fallbackText, privacy: .public)")
+                    hasEmittedFinalResult = true
+                    continuation.yield(.finalTextReady(text: fallbackText))
+                    continuation.yield(.sessionEnded)
+                    return
+                }
+            }
             continuation.yield(.sessionFailed(SessionFailureInfo(message: "豆包返回消息[\(code)]：\(message)")))
             continuation.yield(.sessionEnded)
             return

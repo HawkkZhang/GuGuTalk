@@ -53,15 +53,13 @@ final class RecognitionOrchestrator: ObservableObject {
         dismissTask = nil
 
         previewState.resetToIdle()
-        previewState.isVisible = true
-        previewState.title = "准备开始录音"
-        previewState.message = "正在检查权限与识别引擎"
         finalTranscript = ""
         lastErrorMessage = nil
         lastInsertionResult = nil
         isPendingStop = false
 
-        await permissionCoordinator.refreshAll(promptForSystemDialogs: true)
+        // 快速检查权限（不弹窗）
+        await permissionCoordinator.refreshAll(promptForSystemDialogs: false)
         guard permissionCoordinator.allRequiredForCaptureReady() else {
             let missing = permissionCoordinator
                 .missingPermissions(for: settings.preferredMode)
@@ -78,12 +76,16 @@ final class RecognitionOrchestrator: ObservableObject {
             return
         }
 
+        // 立即显示气泡
+        previewState.isVisible = true
+        previewState.title = "正在聆听"
+        previewState.message = "正在启动识别引擎"
+        previewState.isRecording = true
+
         do {
             let selection = try await startProviderChain(selections, config: config)
             previewState.activeMode = selection.mode
-            previewState.title = "正在聆听"
             previewState.message = "按住说话，松开后会插入最终文本"
-            previewState.isRecording = true
             isSessionActive = true
             isSessionRunning = true
 
@@ -125,6 +127,10 @@ final class RecognitionOrchestrator: ObservableObject {
 
         isPendingStop = false
         previewState.isRecording = false
+        previewState.message = "正在处理最后的音频"
+
+        // 延迟停止音频捕获，确保最后的音频被处理
+        try? await Task.sleep(for: .milliseconds(300))
         audioCaptureEngine.stopCapture()
 
         let hadTranscript = !finalTranscript.isEmpty || !previewState.transcript.isEmpty
@@ -235,9 +241,19 @@ final class RecognitionOrchestrator: ObservableObject {
         case .providerSwitched(let info):
             previewState.message = "已切换 \(info.from.title) -> \(info.to.title)"
         case .sessionFailed(let failure):
-            let hadContent = !finalTranscript.isEmpty || !previewState.transcript.isEmpty
+            let currentTranscript = previewState.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            let hadContent = !finalTranscript.isEmpty || !currentTranscript.isEmpty
+
             if hadContent {
-                fail(message: friendlyErrorMessage(failure))
+                if finalTranscript.isEmpty && !currentTranscript.isEmpty {
+                    Self.logger.info("Session failed but have partial results, attempting to use them as final")
+                    finalTranscript = postProcessor.finalize(currentTranscript)
+                    previewState.transcript = finalTranscript
+                    insertFinalText()
+                    previewState.hintMessage = "识别未完成，已插入部分结果"
+                } else {
+                    fail(message: friendlyErrorMessage(failure))
+                }
             } else {
                 dismissQuietly(message: "说话时间太短，没有识别到内容")
             }
@@ -281,6 +297,7 @@ final class RecognitionOrchestrator: ObservableObject {
         } else {
             previewState.errorMessage = result.failureReason
             lastErrorMessage = result.failureReason
+            scheduleDismiss(delay: 3.0)
         }
     }
 

@@ -72,8 +72,7 @@ final class SmartPostProcessor {
     }
 
     private func resolvePipeline(targetApp: String?, targetBundleID: String?) -> PostProcessingConfig.ProcessingPipeline {
-        if let preset = settings.postProcessingPreset {
-            let prompt = settings.effectivePrompt(for: preset)
+        if let prompt = settings.activePostProcessingPrompt {
             return PostProcessingConfig.ProcessingPipeline(
                 rules: [.collapseWhitespace, .trimWhitespace],
                 llmPrompt: prompt

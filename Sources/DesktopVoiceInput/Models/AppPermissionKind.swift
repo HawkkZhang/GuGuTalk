@@ -34,17 +34,38 @@ enum AppPermissionKind: String, CaseIterable, Identifiable {
         }
     }
 
-    var settingsURLString: String {
+    var settingsURLStrings: [String] {
         switch self {
         case .microphone:
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+            [
+                "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Microphone",
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+            ]
         case .speechRecognition:
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition"
+            [
+                "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_SpeechRecognition",
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition"
+            ]
         case .accessibility:
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+            [
+                "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility",
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+                "x-apple.systempreferences:com.apple.preference.security?PrivacyAccessibilityServicesType"
+            ]
         case .inputMonitoring:
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
+            [
+                "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_ListenEvent",
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
+            ]
         }
+    }
+
+    var fallbackSettingsURLStrings: [String] {
+        [
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy",
+            "x-apple.systempreferences:com.apple.preference.security"
+        ]
     }
 
     var canPromptInApp: Bool {

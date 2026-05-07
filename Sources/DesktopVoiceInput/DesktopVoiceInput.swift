@@ -11,7 +11,8 @@ struct DesktopVoiceInputApp: App {
                 .preferredColorScheme(appModel.settings.appearancePreference.colorScheme)
                 .id(appModel.appearanceRevision)
         } label: {
-            Label("Desktop Voice Input", systemImage: appModel.previewState.menuBarSymbolName)
+            Image("MenuBarIcon")
+                .renderingMode(.template)
         }
         .menuBarExtraStyle(.window)
 
