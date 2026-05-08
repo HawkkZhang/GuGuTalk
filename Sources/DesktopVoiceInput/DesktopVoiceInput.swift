@@ -11,9 +11,9 @@ struct DesktopVoiceInputApp: App {
                 .preferredColorScheme(appModel.settings.appearancePreference.colorScheme)
                 .id(appModel.appearanceRevision)
                 .onAppear {
-                    // 将 appModel 传递给 AppDelegate，以便管理设置窗口
+                    // 在 MenuBarExtra 出现时立即设置窗口
                     if let delegate = NSApp.delegate as? AppDelegate {
-                        delegate.setupSettingsWindow(appModel: appModel)
+                        delegate.setupSettingsWindowIfNeeded(appModel: appModel)
                     }
                 }
         } label: {

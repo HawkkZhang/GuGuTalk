@@ -15,7 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    func setupSettingsWindow(appModel: VoiceInputAppModel) {
+    func setupSettingsWindowIfNeeded(appModel: VoiceInputAppModel) {
         if settingsWindow == nil {
             // 创建原生窗口
             let window = NSWindow(
@@ -72,6 +72,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self = self, let window = self.settingsWindow else { return }
                 window.appearance = appModel.settings.appearancePreference.nsAppearance
                 window.contentView?.needsDisplay = true
+            }
+
+            // 窗口设置完成后，检查是否需要打开设置窗口
+            if appModel.shouldOpenSettingsOnLaunch {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    let tab: SettingsTab = appModel.hasMissingPermissions ? .permissions : .general
+                    appModel.showSettingsWindow(tab: tab)
+                }
             }
         }
     }
