@@ -23,7 +23,6 @@ final class VoiceInputAppModel: ObservableObject {
     @Published private(set) var requestedSettingsTab: SettingsTab = .general
     @Published private(set) var settingsFocusRequest = UUID()
     @Published private(set) var settingsOpenRequest: UUID?
-    @Published private(set) var shouldOpenSettingsOnLaunch = false
 
     private var cancellables = Set<AnyCancellable>()
     private var activeTriggerKind: ActiveTriggerKind?
@@ -68,8 +67,7 @@ final class VoiceInputAppModel: ObservableObject {
 
         Task {
             await refreshPermissionsAndUpdateHotkeys(promptForSystemDialogs: false)
-            // 标记需要打开设置窗口，但不立即打开
-            shouldOpenSettingsOnLaunch = true
+            openSettingsWindowForAppEntry()
         }
     }
 
@@ -187,19 +185,11 @@ final class VoiceInputAppModel: ObservableObject {
     }
 
     func openSettingsWindow() {
-        NotificationCenter.default.post(
-            name: .settingsWindowOpenRequested,
-            object: nil,
-            userInfo: nil
-        )
+        AppDelegate.shared?.openSettingsWindow()
     }
 
     func bringSettingsWindowForward() {
-        NotificationCenter.default.post(
-            name: .settingsWindowOpenRequested,
-            object: nil,
-            userInfo: nil
-        )
+        AppDelegate.shared?.openSettingsWindow()
     }
 
     func prepareSettingsWindow(tab: SettingsTab) {
@@ -209,11 +199,7 @@ final class VoiceInputAppModel: ObservableObject {
 
     func showSettingsWindow(tab: SettingsTab) {
         prepareSettingsWindow(tab: tab)
-        NotificationCenter.default.post(
-            name: .settingsWindowOpenRequested,
-            object: nil,
-            userInfo: ["tab": tab]
-        )
+        AppDelegate.shared?.openSettingsWindow(tab: tab)
     }
 
     func openSystemSettings(for permission: AppPermissionKind) {

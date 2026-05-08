@@ -3,8 +3,17 @@ import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    static var shared: AppDelegate?
+
     private var settingsWindow: NSWindow?
     private var settingsHostingController: NSHostingController<SettingsView>?
+    private weak var appModel: VoiceInputAppModel?
+    private var pendingOpenRequest: SettingsTab??  // 双层 Optional 用于区分"无请求"和"无指定 tab"
+
+    override init() {
+        super.init()
+        AppDelegate.shared = self
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -15,78 +24,73 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    func setupSettingsWindowIfNeeded(appModel: VoiceInputAppModel) {
-        if settingsWindow == nil {
-            // 创建原生窗口
-            let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 560, height: 560),
-                styleMask: [.titled, .closable, .miniaturizable, .resizable],
-                backing: .buffered,
-                defer: false
-            )
+    /// 注册 appModel 并立即创建设置窗口
+    func registerAppModel(_ appModel: VoiceInputAppModel) {
+        guard self.appModel == nil else { return }
+        self.appModel = appModel
+        setupSettingsWindow(appModel: appModel)
 
-            window.title = "GuGuTalk 设置"
-            window.center()
-            window.setFrameAutosaveName("GuGuTalkSettingsWindow")
-            window.minSize = NSSize(width: 560, height: 560)
-            window.isReleasedWhenClosed = false
-
-            // 创建 SwiftUI 视图并嵌入窗口
-            let settingsView = SettingsView(appModel: appModel)
-            let hostingController = NSHostingController(rootView: settingsView)
-
-            window.contentViewController = hostingController
-            window.appearance = appModel.settings.appearancePreference.nsAppearance
-
-            self.settingsWindow = window
-            self.settingsHostingController = hostingController
-
-            // 监听设置窗口打开请求
-            NotificationCenter.default.addObserver(
-                forName: .settingsWindowOpenRequested,
-                object: nil,
-                queue: .main
-            ) { [weak self] notification in
-                guard let self = self, let window = self.settingsWindow else { return }
-
-                // 如果有指定 tab，更新 appModel
-                if let tab = notification.userInfo?["tab"] as? SettingsTab {
-                    appModel.prepareSettingsWindow(tab: tab)
-                }
-
-                window.makeKeyAndOrderFront(nil)
-                NSApp.activate(ignoringOtherApps: true)
-
-                // 确保窗口在最前面
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    window.orderFrontRegardless()
-                }
-            }
-
-            // 监听外观变化
-            NotificationCenter.default.addObserver(
-                forName: .appearanceDidChange,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                guard let self = self, let window = self.settingsWindow else { return }
-                window.appearance = appModel.settings.appearancePreference.nsAppearance
-                window.contentView?.needsDisplay = true
-            }
-
-            // 窗口设置完成后，检查是否需要打开设置窗口
-            if appModel.shouldOpenSettingsOnLaunch {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    let tab: SettingsTab = appModel.hasMissingPermissions ? .permissions : .general
-                    appModel.showSettingsWindow(tab: tab)
-                }
-            }
+        // 处理待处理的打开请求
+        if let pendingTab = pendingOpenRequest {
+            pendingOpenRequest = nil
+            openSettingsWindow(tab: pendingTab)
         }
+    }
+
+    /// 直接打开设置窗口（不通过通知）
+    func openSettingsWindow(tab: SettingsTab? = nil) {
+        guard let appModel = appModel else {
+            // appModel 还没注册，缓存请求
+            pendingOpenRequest = tab
+            return
+        }
+
+        // 确保窗口已创建
+        if settingsWindow == nil {
+            setupSettingsWindow(appModel: appModel)
+        }
+
+        guard let window = settingsWindow else { return }
+
+        if let tab = tab {
+            appModel.prepareSettingsWindow(tab: tab)
+        }
+
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.settingsWindow?.orderFrontRegardless()
+        }
+    }
+
+    private func setupSettingsWindow(appModel: VoiceInputAppModel) {
+        guard settingsWindow == nil else { return }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 560),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+
+        window.title = "GuGuTalk 设置"
+        window.center()
+        window.setFrameAutosaveName("GuGuTalkSettingsWindow")
+        window.minSize = NSSize(width: 560, height: 560)
+        window.isReleasedWhenClosed = false
+
+        let settingsView = SettingsView(appModel: appModel)
+        let hostingController = NSHostingController(rootView: settingsView)
+
+        window.contentViewController = hostingController
+        window.appearance = appModel.settings.appearancePreference.nsAppearance
+
+        self.settingsWindow = window
+        self.settingsHostingController = hostingController
     }
 }
 
 extension Notification.Name {
     static let voiceInputAppReopenRequested = Notification.Name("voiceInputAppReopenRequested")
-    static let settingsWindowOpenRequested = Notification.Name("settingsWindowOpenRequested")
-    static let appearanceDidChange = Notification.Name("AppearanceDidChange")
 }

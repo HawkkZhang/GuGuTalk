@@ -11,15 +11,24 @@ struct DesktopVoiceInputApp: App {
                 .preferredColorScheme(appModel.settings.appearancePreference.colorScheme)
                 .id(appModel.appearanceRevision)
                 .onAppear {
-                    // 在 MenuBarExtra 出现时立即设置窗口
-                    if let delegate = NSApp.delegate as? AppDelegate {
-                        delegate.setupSettingsWindowIfNeeded(appModel: appModel)
-                    }
+                    AppDelegate.shared?.registerAppModel(appModel)
                 }
         } label: {
-            Image("MenuBarIcon")
-                .renderingMode(.template)
+            MenuBarLabel(appModel: appModel)
         }
         .menuBarExtraStyle(.window)
+    }
+}
+
+/// 菜单栏标签 - 使用 onAppear 来注册 appModel
+private struct MenuBarLabel: View {
+    let appModel: VoiceInputAppModel
+
+    var body: some View {
+        Image("MenuBarIcon")
+            .renderingMode(.template)
+            .onAppear {
+                AppDelegate.shared?.registerAppModel(appModel)
+            }
     }
 }
