@@ -75,7 +75,7 @@ enum TextTransform: Codable, Equatable, Identifiable {
                 options: .regularExpression
             )
         case .removeTrailingPunctuation:
-            var result = text
+            var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
             while let last = result.unicodeScalars.last,
                   CharacterSet.punctuationCharacters.union(.symbols).contains(last) {
                 result = String(result.dropLast())

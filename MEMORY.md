@@ -36,6 +36,7 @@
 - 启用 Hardened Runtime（尝试修复权限检测）
 - 启用代码签名（现为本地稳定证书 `GuGuTalk Local Code Signing`，不再依赖 ad-hoc）
 - 添加 `Config/DesktopVoiceInput.entitlements`，包含麦克风音频输入 entitlement
+- 首次启动会自动打开设置窗口；缺权限时直接进入“权限”页，避免新用户误以为菜单栏应用消失
 - 移除自动打开设置窗口逻辑（导致问题 2）
 - 添加"刷新检查"按钮
 - 曾添加"我已授权，继续使用"按钮（已移除）

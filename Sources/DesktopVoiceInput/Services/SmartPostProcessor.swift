@@ -18,16 +18,13 @@ final class SmartPostProcessor {
     }
 
     func processRulesOnly(text: String) -> String {
-        let punctuationRules = settings.punctuationMode.rules
-        var result = PostProcessingConfig.applyRules(punctuationRules, to: text)
+        var result = fallback.finalize(text)
         result = applyHotwordCorrection(to: result)
-        return result
+        return applyFinalPunctuationRules(to: result)
     }
 
     func process(text: String, targetApp: String?, targetBundleID: String?) async -> String {
-        // 标点处理始终生效，不依赖 LLM 开关
-        let punctuationRules = settings.punctuationMode.rules
-        var result = PostProcessingConfig.applyRules(punctuationRules, to: text)
+        var result = fallback.finalize(text)
 
         // 热词模糊替换（规则层，始终生效）
         result = applyHotwordCorrection(to: result)
@@ -38,7 +35,7 @@ final class SmartPostProcessor {
 
         // LLM 后处理需要开关打开
         guard settings.postProcessingEnabled else {
-            return result.isEmpty ? fallback.finalize(text) : result
+            return applyFinalPunctuationRules(to: result)
         }
 
         let pipeline = resolvePipeline(targetApp: targetApp, targetBundleID: targetBundleID)
@@ -68,7 +65,9 @@ final class SmartPostProcessor {
             }
         }
 
-        return result
+        // 标点选项是最终输出格式，必须在 LLM 之后再次收口，避免模型重新补回句号。
+        result = applyHotwordCorrection(to: result)
+        return applyFinalPunctuationRules(to: result)
     }
 
     private func resolvePipeline(targetApp: String?, targetBundleID: String?) -> PostProcessingConfig.ProcessingPipeline {
@@ -93,5 +92,11 @@ final class SmartPostProcessor {
 
     private func applyHotwordCorrection(to text: String) -> String {
         hotwordStore.applyReplacements(to: text)
+    }
+
+    private func applyFinalPunctuationRules(to text: String) -> String {
+        let normalized = fallback.finalize(text)
+        let punctuationRules = settings.punctuationMode.rules
+        return PostProcessingConfig.applyRules(punctuationRules, to: normalized)
     }
 }

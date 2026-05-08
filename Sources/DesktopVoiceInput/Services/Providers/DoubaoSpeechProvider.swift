@@ -244,7 +244,10 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
     }
 
     private func updatePreviewTranscript(with incoming: String, isSegmentFinal: Bool) -> String {
-        let sanitizedIncoming = sanitizeTranscript(incoming)
+        let sanitizedIncoming = DoubaoTranscriptStabilizer.stabilize(
+            incoming: sanitizeTranscript(incoming),
+            previous: activeSegmentTranscript
+        )
         guard !sanitizedIncoming.isEmpty else {
             return currentTranscriptPreview()
         }
@@ -321,7 +324,79 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
 
     private func currentTranscriptPreview() -> String {
         guard !activeSegmentTranscript.isEmpty else { return committedTranscript }
-        return mergeOverlappingText(base: committedTranscript, incoming: activeSegmentTranscript)
+        return DoubaoTranscriptStabilizer.stabilize(
+            incoming: mergeOverlappingText(base: committedTranscript, incoming: activeSegmentTranscript),
+            previous: nil
+        )
+    }
+}
+
+enum DoubaoTranscriptStabilizer {
+    static func stabilize(incoming: String, previous: String?) -> String {
+        var result = incoming.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let previous, !previous.isEmpty, result.hasPrefix(previous) {
+            let remainder = String(result.dropFirst(previous.count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if startsLikeBeginning(of: previous, text: remainder) {
+                result = remainder
+            }
+        }
+
+        return collapseAdjacentRepeats(in: result)
+    }
+
+    private static func startsLikeBeginning(of reference: String, text: String) -> Bool {
+        let referenceKey = comparableKey(reference)
+        let textKey = comparableKey(text)
+        guard referenceKey.count >= 3, textKey.count >= 3 else { return false }
+
+        let prefixLength = min(referenceKey.count, max(3, min(8, textKey.count)))
+        let prefix = String(referenceKey.prefix(prefixLength))
+        return textKey.hasPrefix(prefix)
+    }
+
+    private static func collapseAdjacentRepeats(in text: String) -> String {
+        var characters = Array(text)
+        var index = 0
+
+        while index < characters.count {
+            let remaining = characters.count - index
+            guard remaining >= 6 else { break }
+
+            var collapsedAtCurrentIndex = false
+            let maxLength = min(32, remaining / 2)
+
+            for length in stride(from: maxLength, through: 3, by: -1) {
+                let first = String(characters[index..<(index + length)])
+                let second = String(characters[(index + length)..<(index + length * 2)])
+                let firstKey = comparableKey(first)
+                guard firstKey.count >= 3, firstKey == comparableKey(second) else { continue }
+
+                characters.removeSubrange((index + length)..<(index + length * 2))
+                collapsedAtCurrentIndex = true
+                break
+            }
+
+            if !collapsedAtCurrentIndex {
+                index += 1
+            }
+        }
+
+        return String(characters).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func comparableKey(_ text: String) -> String {
+        text
+            .lowercased()
+            .unicodeScalars
+            .filter { scalar in
+                !CharacterSet.whitespacesAndNewlines.contains(scalar)
+                    && !CharacterSet.punctuationCharacters.contains(scalar)
+                    && !CharacterSet.symbols.contains(scalar)
+            }
+            .map(String.init)
+            .joined()
     }
 }
 

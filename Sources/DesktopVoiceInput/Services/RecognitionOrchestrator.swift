@@ -153,7 +153,7 @@ final class RecognitionOrchestrator: ObservableObject {
             Self.logger.warning("Session timed out waiting for final result, force ending")
             let transcript = self.previewState.transcript
             if !transcript.isEmpty, self.finalTranscript.isEmpty {
-                self.finalTranscript = self.postProcessor.finalize(transcript)
+                self.finalTranscript = self.smartPostProcessor.processRulesOnly(text: transcript)
                 if !self.finalTranscript.isEmpty {
                     let result = self.textInsertionService.insert(text: self.finalTranscript)
                     self.lastInsertionResult = result
@@ -221,7 +221,7 @@ final class RecognitionOrchestrator: ObservableObject {
             let targetApp = frontmostApp?.localizedName
             let targetBundleID = frontmostApp?.bundleIdentifier
 
-            if settings.postProcessingEnabled, settings.postProcessingPreset != nil, settings.llmProviderConfig.isConfigured {
+            if settings.postProcessingEnabled, settings.activePostProcessingPrompt != nil, settings.llmProviderConfig.isConfigured {
                 previewState.transcript = basicResult
                 previewState.message = "正在处理文本"
                 Task { @MainActor in
@@ -247,7 +247,7 @@ final class RecognitionOrchestrator: ObservableObject {
             if hadContent {
                 if finalTranscript.isEmpty && !currentTranscript.isEmpty {
                     Self.logger.info("Session failed but have partial results, attempting to use them as final")
-                    finalTranscript = postProcessor.finalize(currentTranscript)
+                    finalTranscript = smartPostProcessor.processRulesOnly(text: currentTranscript)
                     previewState.transcript = finalTranscript
                     insertFinalText()
                     previewState.hintMessage = "识别未完成，已插入部分结果"

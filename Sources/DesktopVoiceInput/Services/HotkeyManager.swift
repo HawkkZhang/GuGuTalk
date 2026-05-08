@@ -111,9 +111,9 @@ final class HotkeyManager {
 
         // Fn 键（keyCode 63）在 flagsChanged 中单独处理，这里跳过
         let matchesHoldKeyCode = settings.holdToTalkEnabled && keyCode == holdHotkey.keyCode && keyCode != 63
-        let matchesHoldModifiers = settings.holdToTalkEnabled && matchModifiers(flags, against: holdHotkey.modifiers)
+        let matchesHoldModifiers = settings.holdToTalkEnabled && matchModifiersExactly(flags, against: holdHotkey.modifiers)
         let matchesToggleKeyCode = settings.toggleToTalkEnabled && keyCode == toggleHotkey.keyCode && keyCode != 63
-        let matchesToggleModifiers = settings.toggleToTalkEnabled && matchModifiers(flags, against: toggleHotkey.modifiers)
+        let matchesToggleModifiers = settings.toggleToTalkEnabled && matchModifiersExactly(flags, against: toggleHotkey.modifiers)
 
         switch type {
         case .keyDown:
@@ -166,11 +166,12 @@ final class HotkeyManager {
             for (keyCode, flag) in modifierKeyMap {
                 // Toggle mode
                 if settings.toggleToTalkEnabled, toggleHotkey.keyCode == keyCode {
-                    if flags.contains(flag), !isTogglePressed {
+                    let isShortcutActive = modifierShortcutIsActive(flags: flags, triggerFlag: flag, hotkey: toggleHotkey)
+                    if isShortcutActive, !isTogglePressed {
                         isTogglePressed = true
                         onTogglePress?()
                         return true
-                    } else if !flags.contains(flag), isTogglePressed {
+                    } else if !isShortcutActive, isTogglePressed {
                         isTogglePressed = false
                         return true
                     }
@@ -178,11 +179,12 @@ final class HotkeyManager {
 
                 // Hold mode
                 if settings.holdToTalkEnabled, holdHotkey.keyCode == keyCode {
-                    if flags.contains(flag), !isHoldPressed {
+                    let isShortcutActive = modifierShortcutIsActive(flags: flags, triggerFlag: flag, hotkey: holdHotkey)
+                    if isShortcutActive, !isHoldPressed {
                         isHoldPressed = true
                         onHoldPress?()
                         return true
-                    } else if !flags.contains(flag), isHoldPressed {
+                    } else if !isShortcutActive, isHoldPressed {
                         isHoldPressed = false
                         onHoldRelease?()
                         return true
@@ -196,10 +198,18 @@ final class HotkeyManager {
         }
     }
 
-    private func matchModifiers(_ actual: NSEvent.ModifierFlags, against expected: NSEvent.ModifierFlags) -> Bool {
-        if expected.isEmpty {
-            return actual.isEmpty
-        }
-        return actual.isSuperset(of: expected)
+    private func modifierShortcutIsActive(
+        flags: NSEvent.ModifierFlags,
+        triggerFlag: NSEvent.ModifierFlags,
+        hotkey: HotkeyConfiguration
+    ) -> Bool {
+        let expectedFlags = hotkey.modifiers.union(triggerFlag)
+        return matchModifiersExactly(flags, against: expectedFlags)
     }
+
+    private func matchModifiersExactly(_ actual: NSEvent.ModifierFlags, against expected: NSEvent.ModifierFlags) -> Bool {
+        actual.intersection(Self.supportedModifierMask) == expected.intersection(Self.supportedModifierMask)
+    }
+
+    private static let supportedModifierMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
 }

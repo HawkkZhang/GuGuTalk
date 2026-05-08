@@ -4,6 +4,10 @@ import Foundation
 
 @MainActor
 final class VoiceInputAppModel: ObservableObject {
+    private enum DefaultsKey {
+        static let hasShownFirstLaunchSettings = "hasShownFirstLaunchSettings"
+    }
+
     private enum ActiveTriggerKind {
         case holdToTalk
         case toggleToTalk
@@ -66,7 +70,7 @@ final class VoiceInputAppModel: ObservableObject {
 
         Task {
             await refreshPermissionsAndUpdateHotkeys(promptForSystemDialogs: false)
-            openSettingsWindowIfPermissionsAreMissing()
+            openInitialSettingsWindowIfNeeded()
         }
     }
 
@@ -313,12 +317,25 @@ final class VoiceInputAppModel: ObservableObject {
         permissionCoordinator.inputMonitoring.isUsable && permissionCoordinator.accessibility.isUsable
     }
 
-    private func openSettingsWindowIfPermissionsAreMissing() {
-        guard hasMissingPermissions else { return }
+    private func openInitialSettingsWindowIfNeeded() {
+        let hasShownFirstLaunchSettings = UserDefaults.standard.bool(forKey: DefaultsKey.hasShownFirstLaunchSettings)
+        let targetTab: SettingsTab?
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-            guard let self, self.hasMissingPermissions else { return }
-            self.showSettingsWindow(tab: .permissions)
+        if !hasShownFirstLaunchSettings {
+            UserDefaults.standard.set(true, forKey: DefaultsKey.hasShownFirstLaunchSettings)
+            targetTab = hasMissingPermissions ? .permissions : .general
+        } else if hasMissingPermissions {
+            targetTab = .permissions
+        } else {
+            targetTab = nil
+        }
+
+        guard let targetTab else { return }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+            guard let self else { return }
+            let tab = self.hasMissingPermissions ? .permissions : targetTab
+            self.showSettingsWindow(tab: tab)
         }
     }
 

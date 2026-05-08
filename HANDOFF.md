@@ -69,6 +69,7 @@ The app currently has:
 
 - a SwiftUI/AppKit menu bar shell
 - settings window with tabs for common settings, cloud services, and permissions
+- first-launch settings guidance: first run opens Settings automatically, using the Permissions tab when required permissions are missing
 - two shortcut modes:
   - hold-to-talk
   - press-once-to-start, press-again-to-stop
