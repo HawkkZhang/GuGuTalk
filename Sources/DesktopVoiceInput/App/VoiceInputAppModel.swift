@@ -185,16 +185,19 @@ final class VoiceInputAppModel: ObservableObject {
     }
 
     func openSettingsWindow() {
-        NSApp.activate(ignoringOtherApps: true)
-        settingsOpenRequest = UUID()
+        NotificationCenter.default.post(
+            name: .settingsWindowOpenRequested,
+            object: nil,
+            userInfo: nil
+        )
     }
 
     func bringSettingsWindowForward() {
-        NSApp.activate(ignoringOtherApps: true)
-        for window in NSApp.windows where !(window is NSPanel) {
-            window.makeKeyAndOrderFront(nil)
-            window.orderFrontRegardless()
-        }
+        NotificationCenter.default.post(
+            name: .settingsWindowOpenRequested,
+            object: nil,
+            userInfo: nil
+        )
     }
 
     func prepareSettingsWindow(tab: SettingsTab) {
@@ -204,7 +207,11 @@ final class VoiceInputAppModel: ObservableObject {
 
     func showSettingsWindow(tab: SettingsTab) {
         prepareSettingsWindow(tab: tab)
-        openSettingsWindow()
+        NotificationCenter.default.post(
+            name: .settingsWindowOpenRequested,
+            object: nil,
+            userInfo: ["tab": tab]
+        )
     }
 
     func openSystemSettings(for permission: AppPermissionKind) {
