@@ -29,15 +29,15 @@ This file is the first-stop handoff note for switching between Codex, Claude Cod
 - Stable tag: `stable-2026-05-01`
 - Stable commit: `960f2b3`
 - GitHub repository: `https://github.com/HawkkZhang/GuGuSpeak`
-- Latest pushed checkpoint on `main`: `0772dcf 保存当前测试版状态`
+- Latest pushed checkpoint on `main`: `5521384 记录豆包流式修复和启动入口方案`
 - Local branch at time of writing: `main`
 - Remote branch: `origin/main`
 
 If local work gets messy, use the stable tag as the known-good restore point.
 
-## Current WIP - 2026-05-08
+## Latest Synced State - 2026-05-08
 
-The working tree currently contains uncommitted changes. Do not assume this state has been pushed.
+The current handoff state has been pushed to GitHub on `main` at commit `5521384`.
 
 Implemented and locally tested:
 
@@ -52,7 +52,7 @@ WIP / not final:
 
 - A bridge-based attempt was added to open the SwiftUI `Settings` scene when the app is launched or reopened from Finder.
 - The user correctly questioned whether this is the clean product architecture.
-- Recommended next step: replace SwiftUI `Settings {}` as the primary app UI with a dedicated native app window for GuGuTalk settings/onboarding. Finder launch, menu bar "设置", and permission guidance should all open the same dedicated window.
+- Recommended next step for Claude Code: replace SwiftUI `Settings {}` as the primary app UI with a dedicated native app window for GuGuTalk settings/onboarding. Finder launch, menu bar "设置", and permission guidance should all open the same dedicated window.
 - The bridge approach may remain as temporary wiring only if needed, but should not be treated as the long-term solution.
 
 Desired app-entry behavior:
@@ -152,7 +152,12 @@ Use this when opening Claude Code or another coding agent:
 ```text
 Please first read PRODUCT.md, DESIGN.md, MEMORY.md, HANDOFF.md, README.md, and the latest git log.
 This is a macOS SwiftUI/AppKit voice input app named GuGuSpeak / DesktopVoiceInput.
-Continue from the current repository state without overwriting uncommitted changes.
+Continue from main at or after commit 5521384.
+Start by replacing the current SwiftUI Settings scene entry flow with a dedicated native settings/onboarding window for GuGuTalk.
+Route Finder/Launchpad app open, app reopen, menu bar Settings, and permission guidance into the same window.
+If permissions are missing, open that window to Permissions; otherwise open General/Home.
+Preserve the Doubao utterances[].definite streaming handling from 5521384 unless real logs prove it wrong.
+Do not overwrite uncommitted changes if any exist in the local checkout.
 Respect the native macOS design direction and the known risks in HANDOFF.md.
 Before editing, inspect the relevant files and summarize the intended change.
 After a stable change, build with xcodebuild, commit, and push.
