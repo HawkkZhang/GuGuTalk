@@ -220,7 +220,6 @@ struct SettingsView: View {
                     slot: .holdToTalk,
                     otherHotkey: appModel.settings.toggleToTalkHotkey
                 )
-                .frame(maxWidth: .infinity)
 
                 hotkeyModeCard(
                     title: "按一下说话",
@@ -232,9 +231,7 @@ struct SettingsView: View {
                     slot: .toggleToTalk,
                     otherHotkey: appModel.settings.holdToTalkHotkey
                 )
-                .frame(maxWidth: .infinity)
             }
-            .fixedSize(horizontal: false, vertical: true)
 
             SectionHeader("外观")
             settingsRow(label: "显示方式") {
@@ -621,7 +618,7 @@ struct SettingsView: View {
             }
         }
         .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 160, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(DVITheme.control, in: RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
