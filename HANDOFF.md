@@ -29,10 +29,38 @@ This file is the first-stop handoff note for switching between Codex, Claude Cod
 - Stable tag: `stable-2026-05-01`
 - Stable commit: `960f2b3`
 - GitHub repository: `https://github.com/HawkkZhang/GuGuSpeak`
-- Local branch at time of writing: `codex/archive-current-state`
+- Latest pushed checkpoint on `main`: `0772dcf 保存当前测试版状态`
+- Local branch at time of writing: `main`
 - Remote branch: `origin/main`
 
 If local work gets messy, use the stable tag as the known-good restore point.
+
+## Current WIP - 2026-05-08
+
+The working tree currently contains uncommitted changes. Do not assume this state has been pushed.
+
+Implemented and locally tested:
+
+- Doubao streaming transcript handling was changed to follow the official `utterances[].definite` semantics more closely:
+  - `definite=true` utterances are treated as committed text.
+  - `definite=false` utterances are treated as the current mutable preview.
+  - This avoids committing the entire `result.text` too early and then duplicating active text when later partials arrive.
+- Conservative short-repeat stabilization was expanded for Doubao to reduce accidental local duplication while preserving normal single-character reduplication such as `试试`.
+- `swift test` passed with 12 tests after these changes.
+
+WIP / not final:
+
+- A bridge-based attempt was added to open the SwiftUI `Settings` scene when the app is launched or reopened from Finder.
+- The user correctly questioned whether this is the clean product architecture.
+- Recommended next step: replace SwiftUI `Settings {}` as the primary app UI with a dedicated native app window for GuGuTalk settings/onboarding. Finder launch, menu bar "设置", and permission guidance should all open the same dedicated window.
+- The bridge approach may remain as temporary wiring only if needed, but should not be treated as the long-term solution.
+
+Desired app-entry behavior:
+
+- Every time the user opens GuGuTalk from Finder, Launchpad, or `/Applications`, the app should show the main settings/onboarding window.
+- If required permissions are missing, open directly to the Permissions page.
+- If permissions are ready, open to the General/Home page.
+- The app should still remain a menu bar utility for day-to-day recording, but launch should not feel like the app disappeared into the menu bar.
 
 ## Product Snapshot
 
@@ -68,8 +96,8 @@ When switching tools, update `HANDOFF.md` if the next step, risk, or known-good 
 The app currently has:
 
 - a SwiftUI/AppKit menu bar shell
-- settings window with tabs for common settings, cloud services, and permissions
-- first-launch settings guidance: first run opens Settings automatically, using the Permissions tab when required permissions are missing
+- settings UI with tabs for common settings, cloud services, and permissions
+- app-entry settings guidance is being redesigned: every app launch/reopen should show settings/onboarding, with Permissions selected when required permissions are missing
 - two shortcut modes:
   - hold-to-talk
   - press-once-to-start, press-again-to-stop
@@ -94,6 +122,7 @@ The most recent UI direction is:
 
 ## Known Risks
 
+- Settings/onboarding architecture is currently in transition. SwiftUI's `Settings` scene is awkward for "open the app and show the main window" behavior because `openSettings()` is only available from SwiftUI environment. Prefer a dedicated app window for the next implementation pass.
 - The locally signed `/Applications/GuGuTalk.app` is for development testing. It may still be blocked by Gatekeeper when double-clicked because the certificate is self-signed; launching via `/Applications/GuGuTalk.app/Contents/MacOS/DesktopVoiceInput` is currently the most reliable local test path.
 - Do not assume hotkeys are fully stable. Dual hotkey mode still needs testing and polish.
 - Do not let shortcut recording trigger live voice input.
@@ -106,13 +135,15 @@ The most recent UI direction is:
 
 ## Next Recommended Work
 
-1. Stabilize hotkey state transitions.
-2. Harden the text insertion pipeline for browsers, rich-text editors, Electron apps, and native text fields.
-3. Add self-protection so settings/internal windows cannot receive dictated text.
-4. Improve provider configuration validation before a recording session starts.
-5. Improve provider visibility in the menu bar console and errors.
-6. Add automated tests for hotkeys, insertion guards, and provider selection.
-7. Eventually set up signing, packaging, and release artifacts.
+1. Replace the SwiftUI `Settings` scene with a dedicated native app window for settings/onboarding, and route Finder launch, app reopen, menu bar Settings, and permission guidance into that single window.
+2. Verify Doubao streaming behavior with real speech logs after the `utterances[].definite` parsing change.
+3. Stabilize hotkey state transitions.
+4. Harden the text insertion pipeline for browsers, rich-text editors, Electron apps, and native text fields.
+5. Add self-protection so settings/internal windows cannot receive dictated text.
+6. Improve provider configuration validation before a recording session starts.
+7. Improve provider visibility in the menu bar console and errors.
+8. Add automated tests for hotkeys, insertion guards, and provider selection.
+9. Eventually set up signing, packaging, and release artifacts.
 
 ## Suggested Prompt For Another AI Tool
 

@@ -98,14 +98,9 @@ struct MenuBarContentView: View {
     }
 
     private func openSettingsWindow(to tab: SettingsTab) {
-        appModel.prepareSettingsWindow(tab: tab)
-        openSettings()
+        appModel.showSettingsWindow(tab: tab)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-            NSApp.activate(ignoringOtherApps: true)
-            for window in NSApp.windows where !(window is NSPanel) {
-                window.makeKeyAndOrderFront(nil)
-                window.orderFrontRegardless()
-            }
+            appModel.bringSettingsWindowForward()
         }
     }
 }

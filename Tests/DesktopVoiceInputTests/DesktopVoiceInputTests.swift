@@ -48,11 +48,41 @@ final class DesktopVoiceInputTests: XCTestCase {
         XCTAssertEqual(result, "现在输入没问题了，但是会有重复")
     }
 
+    func testDoubaoStabilizerCollapsesShortAdjacentRepeat() {
+        let result = DoubaoTranscriptStabilizer.stabilize(
+            incoming: "现在现在可以继续输入",
+            previous: nil
+        )
+        XCTAssertEqual(result, "现在可以继续输入")
+    }
+
+    func testDoubaoStabilizerKeepsSingleCharacterReduplication() {
+        let result = DoubaoTranscriptStabilizer.stabilize(
+            incoming: "你可以试试这个功能",
+            previous: nil
+        )
+        XCTAssertEqual(result, "你可以试试这个功能")
+    }
+
     func testDoubaoStabilizerKeepsNormalContinuation() {
         let result = DoubaoTranscriptStabilizer.stabilize(
             incoming: "今天我们继续优化语音输入体验",
             previous: "今天我们继续优化"
         )
         XCTAssertEqual(result, "今天我们继续优化语音输入体验")
+    }
+
+    func testDoubaoTranscriptPayloadSplitsFinalizedAndActiveUtterances() {
+        let payload = DoubaoTranscriptPayload(resultObject: [
+            "text": "这是已经确定的，这句还在识别",
+            "utterances": [
+                ["definite": true, "text": "这是已经确定的，"],
+                ["definite": false, "text": "这句还在识别"]
+            ]
+        ])
+
+        XCTAssertEqual(payload?.finalizedText, "这是已经确定的，")
+        XCTAssertEqual(payload?.activeText, "这句还在识别")
+        XCTAssertTrue(payload?.hasFinalizedUtterance == true)
     }
 }

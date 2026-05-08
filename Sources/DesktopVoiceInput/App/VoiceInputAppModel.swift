@@ -4,10 +4,6 @@ import Foundation
 
 @MainActor
 final class VoiceInputAppModel: ObservableObject {
-    private enum DefaultsKey {
-        static let hasShownFirstLaunchSettings = "hasShownFirstLaunchSettings"
-    }
-
     private enum ActiveTriggerKind {
         case holdToTalk
         case toggleToTalk
@@ -26,6 +22,7 @@ final class VoiceInputAppModel: ObservableObject {
     @Published private(set) var appearanceRevision = UUID()
     @Published private(set) var requestedSettingsTab: SettingsTab = .general
     @Published private(set) var settingsFocusRequest = UUID()
+    @Published private(set) var settingsOpenRequest: UUID?
 
     private var cancellables = Set<AnyCancellable>()
     private var activeTriggerKind: ActiveTriggerKind?
@@ -70,7 +67,7 @@ final class VoiceInputAppModel: ObservableObject {
 
         Task {
             await refreshPermissionsAndUpdateHotkeys(promptForSystemDialogs: false)
-            openInitialSettingsWindowIfNeeded()
+            openSettingsWindowForAppEntry()
         }
     }
 
@@ -160,6 +157,16 @@ final class VoiceInputAppModel: ObservableObject {
             }
             .store(in: &cancellables)
 
+        NotificationCenter.default.publisher(for: .voiceInputAppReopenRequested)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                Task {
+                    await self.refreshPermissionsAndUpdateHotkeys(promptForSystemDialogs: false)
+                    self.openSettingsWindowForAppEntry()
+                }
+            }
+            .store(in: &cancellables)
+
         // 监听窗口焦点变化，用户从系统设置返回时立即检查
         NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)
             .sink { [weak self] _ in
@@ -179,7 +186,15 @@ final class VoiceInputAppModel: ObservableObject {
 
     func openSettingsWindow() {
         NSApp.activate(ignoringOtherApps: true)
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        settingsOpenRequest = UUID()
+    }
+
+    func bringSettingsWindowForward() {
+        NSApp.activate(ignoringOtherApps: true)
+        for window in NSApp.windows where !(window is NSPanel) {
+            window.makeKeyAndOrderFront(nil)
+            window.orderFrontRegardless()
+        }
     }
 
     func prepareSettingsWindow(tab: SettingsTab) {
@@ -317,24 +332,10 @@ final class VoiceInputAppModel: ObservableObject {
         permissionCoordinator.inputMonitoring.isUsable && permissionCoordinator.accessibility.isUsable
     }
 
-    private func openInitialSettingsWindowIfNeeded() {
-        let hasShownFirstLaunchSettings = UserDefaults.standard.bool(forKey: DefaultsKey.hasShownFirstLaunchSettings)
-        let targetTab: SettingsTab?
-
-        if !hasShownFirstLaunchSettings {
-            UserDefaults.standard.set(true, forKey: DefaultsKey.hasShownFirstLaunchSettings)
-            targetTab = hasMissingPermissions ? .permissions : .general
-        } else if hasMissingPermissions {
-            targetTab = .permissions
-        } else {
-            targetTab = nil
-        }
-
-        guard let targetTab else { return }
-
+    private func openSettingsWindowForAppEntry() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
             guard let self else { return }
-            let tab = self.hasMissingPermissions ? .permissions : targetTab
+            let tab: SettingsTab = self.hasMissingPermissions ? .permissions : .general
             self.showSettingsWindow(tab: tab)
         }
     }

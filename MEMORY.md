@@ -53,9 +53,24 @@
 - DesktopVoiceInput is a macOS menu bar voice input app prototype.
 - Local Apple Speech, Qwen realtime, and Doubao realtime integrations have all been implemented.
 - The current stable checkpoint is tag `stable-2026-05-01`, commit `960f2b3`.
+- The latest pushed checkpoint on `main` is `0772dcf 保存当前测试版状态`.
 - GitHub repository: `https://github.com/HawkkZhang/GuGuSpeak`.
-- Local development branch is currently `codex/archive-current-state`, tracking `origin/main`.
-- Product name under consideration: `GuGuSpeak`.
+- Local development branch is currently `main`, tracking `origin/main`.
+- Product name in the installed app is currently `GuGuTalk`; repository/project names still include `GuGuSpeak` / `DesktopVoiceInput`.
+
+## Current WIP - 2026-05-08
+
+These changes are currently local WIP unless committed later:
+
+- Doubao streaming result handling now parses `utterances` explicitly.
+- `definite=true` utterances are committed, while `definite=false` utterances remain as the active preview segment.
+- This is intended to fix extra duplicated words caused by treating the whole `result.text` as final whenever any utterance was marked definite.
+- Doubao `enable_ddc` should remain off for this issue. It is a semantic smoothing feature for real spoken filler/repetition, not a fix for client-side streaming result assembly.
+- A temporary SwiftUI Settings-opening bridge was attempted so app launch/reopen can request the settings window.
+- The preferred next architecture is a dedicated native GuGuTalk settings/onboarding window, not relying on SwiftUI `Settings {}` as the app's primary entry window.
+- After app launch or reopen from Finder/Launchpad, expected UX is:
+  - missing required permissions -> open Permissions page
+  - permissions ready -> open General/Home page
 
 ## Not Yet Fully Implemented
 
@@ -84,6 +99,7 @@
   - Qwen
 - Make fallback reasons and provider switching reasons visible to the user.
 - Improve failure messages so they are easier for non-technical users to understand.
+- Continue validating Doubao streaming assembly against official `utterances[].definite` semantics; do not solve client-side partial/final duplication by turning on semantic smoothing.
 
 ### Text Quality
 
@@ -100,6 +116,8 @@
 
 ### Stability / Compatibility
 
+- Settings/onboarding entry is currently a product architecture priority. The app should not feel like it disappears into the menu bar when launched from Finder or Launchpad.
+- Use one dedicated settings/onboarding window for app launch, menu bar Settings, and permission guidance.
 - More compatibility testing is needed across common macOS apps and input fields.
 - Text insertion compatibility is a top-priority product risk. The app must not merely "insert text"; it needs reliable per-target insertion behavior across native text fields, browser editors, rich text editors, Electron apps, and unusual web inputs.
 - Browser / web rich-text editors such as Gemini, ChatGPT, Notion, Google Docs, Feishu, and Slack should generally prefer paste-style insertion because Accessibility `AXValue` can expose placeholder / hint / hidden editor text as if it were real content.
@@ -147,11 +165,10 @@
 
 ## Immediate Priorities
 
-1. ~~Stabilize the hotkey system.~~ (done: event tap auto-recovery, reload protection, debounce)
-2. ~~Harden text insertion compatibility across browsers, rich-text editors, Electron apps, and native macOS fields.~~ (done: clipboard paste as default, full pasteboard save/restore, changeCount check)
-3. ~~Finish self-protection around settings and internal windows.~~ (done: bundleID check)
-4. Add clearer validation and error handling for Doubao / Qwen configuration.
-5. Improve provider visibility and fallback messaging.
-6. Expand tests around hotkeys, insertion, and provider switching.
-7. Implement Agent 对话 for smart post-processing configuration.
-8. Implement per-app post-processing rules.
+1. Replace SwiftUI `Settings {}` as the primary entry UI with a dedicated native settings/onboarding window.
+2. Verify Doubao streaming duplicate fix with real usage and logs.
+3. Add clearer validation and error handling for Doubao / Qwen configuration.
+4. Improve provider visibility and fallback messaging.
+5. Expand tests around hotkeys, insertion, and provider switching.
+6. Implement Agent 对话 for smart post-processing configuration.
+7. Implement per-app post-processing rules.

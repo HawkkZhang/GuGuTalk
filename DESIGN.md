@@ -167,6 +167,12 @@ Depth is conveyed through native macOS material, subtle borders, and small shado
 ### Navigation
 - **Style:** No custom navigation chrome. Settings use grouped sections and native controls.
 
+### App Entry / Onboarding Window
+- **Launch behavior:** Opening GuGuTalk from Finder, Launchpad, or `/Applications` should show a real app window. The app must not appear to disappear into the menu bar.
+- **Window role:** Use one dedicated native settings/onboarding window for launch, menu bar Settings, and permission guidance.
+- **Initial route:** If required permissions are missing, open directly to Permissions. If permissions are ready, open to the General/Home page.
+- **Implementation preference:** Prefer a dedicated app window over treating SwiftUI's `Settings {}` scene as the main entry surface. `Settings {}` is acceptable for conventional app preferences, but this product needs onboarding and permission recovery as primary flows.
+
 ### Menu Bar Console
 - **Purpose:** Show readiness at a glance and expose only the next useful action.
 - **Structure:** Use a compact native status header, a concise shortcut summary, conditional notices, and a small action row.
