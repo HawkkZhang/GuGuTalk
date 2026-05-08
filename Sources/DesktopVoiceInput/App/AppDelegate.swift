@@ -68,7 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard settingsWindow == nil else { return }
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 560),
+            contentRect: NSRect(x: 0, y: 0, width: 760, height: 640),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -77,7 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.title = "GuGuTalk 设置"
         window.center()
         window.setFrameAutosaveName("GuGuTalkSettingsWindow")
-        window.minSize = NSSize(width: 560, height: 560)
+        window.minSize = NSSize(width: 720, height: 600)
         window.isReleasedWhenClosed = false
 
         let settingsView = SettingsView(appModel: appModel)
