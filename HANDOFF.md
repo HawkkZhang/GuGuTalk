@@ -2,6 +2,32 @@
 
 This file is the first-stop handoff note for switching between Codex, Claude Code, Xcode, and other development tools.
 
+## ⚠️ OPEN ISSUES - 2026-05-09
+
+### AI 后处理气泡样式问题（未解决）
+
+**问题描述：**
+- "AI 处理中"状态的气泡大小不正确
+- 用户期望：应该像其他系统状态（波形、提示）那样是**小气泡**
+- 当前状态：气泡大小仍然与识别结果的大气泡一致
+
+**已尝试的修复：**
+1. 修改了 padding 逻辑，让 `isPostProcessing` 使用 12/9 的小 padding
+2. 尝试了 `.fixedSize()` 让气泡自适应宽度
+3. 但用户反馈仍然不正确
+
+**相关代码：**
+- `Sources/DesktopVoiceInput/Services/PreviewOverlayController.swift:149-188`
+- `PreviewState.isPostProcessing` 状态
+- `postProcessingIndicator` 视图
+
+**下一步建议：**
+- 需要重新理解"系统状态气泡"的确切样式
+- 可能需要查看波形状态（waveform）的完整实现作为参考
+- 或者考虑将"AI 处理中"作为 `hintMessage` 而不是独立状态
+
+---
+
 ## ⚠️ CRITICAL ISSUES - 2026-05-07
 
 **权限流程曾导致应用处于不可用状态。Codex 已做一轮修复并通过 Release 编译，已安装到 `/Applications/GuGuTalk.app`，仍需用户本机人工验证。**

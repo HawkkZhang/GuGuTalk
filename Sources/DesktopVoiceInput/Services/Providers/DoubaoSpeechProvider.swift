@@ -132,6 +132,9 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
         let frame = try DoubaoFrameBuilder.buildAudioFrame(chunk: Data(), isLastFrame: true)
         try await transport?.send(data: frame)
         Self.logger.debug("Sent Doubao finish audio frame")
+
+        // 等待最后的结果到达，避免时序问题
+        try? await Task.sleep(for: .milliseconds(200))
     }
 
     func cancel() async {

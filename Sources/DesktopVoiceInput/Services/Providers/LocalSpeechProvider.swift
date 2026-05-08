@@ -60,9 +60,23 @@ final class LocalSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable {
             guard let self else { return }
 
             if let error {
+                // 在清理前，尝试从最后的 partial 结果中提取 final
+                var finalText = self.committedTranscript + self.currentSegmentTranscript
+                if finalText.isEmpty, !self.lastNonEmptySegment.isEmpty {
+                    finalText = self.committedTranscript + self.lastNonEmptySegment
+                }
+
                 self.cleanupRecognitionResources(cancelTask: false)
-                self.continuation.yield(.sessionFailed(SessionFailureInfo(message: error.localizedDescription)))
-                self.continuation.yield(.sessionEnded)
+
+                // 如果有内容，先发送 finalTextReady，再发送 sessionEnded（不发送 sessionFailed）
+                if !finalText.isEmpty {
+                    Self.logger.info("Apple Speech returned error but have partial results, using them as final: [\(finalText, privacy: .public)]")
+                    self.continuation.yield(.finalTextReady(text: finalText))
+                    self.continuation.yield(.sessionEnded)
+                } else {
+                    self.continuation.yield(.sessionFailed(SessionFailureInfo(message: error.localizedDescription)))
+                    self.continuation.yield(.sessionEnded)
+                }
                 return
             }
 

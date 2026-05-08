@@ -222,7 +222,18 @@ final class RecognitionOrchestrator: ObservableObject {
             }
 
             let basicResult = postProcessor.finalize(finalText)
-            if basicResult.isEmpty {
+
+            // 第二层保底：如果 finalize 后为空，再用 preview 原始内容兜底
+            var finalResult = basicResult
+            if finalResult.isEmpty {
+                let previewText = previewState.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !previewText.isEmpty {
+                    Self.logger.warning("Post-processor returned empty, using raw preview as final fallback: [\(previewText, privacy: .public)]")
+                    finalResult = previewText
+                }
+            }
+
+            if finalResult.isEmpty {
                 dismissQuietly(message: "没有识别到有效内容")
                 return
             }
@@ -232,9 +243,14 @@ final class RecognitionOrchestrator: ObservableObject {
             let targetBundleID = frontmostApp?.bundleIdentifier
 
             if settings.postProcessingEnabled, settings.activePostProcessingPrompt != nil, settings.llmProviderConfig.isConfigured {
-                previewState.transcript = basicResult
+                previewState.transcript = finalResult
                 previewState.message = "正在处理文本"
                 previewState.isPostProcessing = true
+
+                // 捕获需要的值，避免 sending 参数的数据竞争
+                let textToProcess = finalResult
+                let app = targetApp
+                let bundleID = targetBundleID
 
                 Task { @MainActor in
                     do {
@@ -242,7 +258,7 @@ final class RecognitionOrchestrator: ObservableObject {
                             // LLM 处理任务
                             group.addTask {
                                 await self.smartPostProcessor.process(
-                                    text: basicResult, targetApp: targetApp, targetBundleID: targetBundleID
+                                    text: textToProcess, targetApp: app, targetBundleID: bundleID
                                 )
                             }
 
@@ -260,8 +276,7 @@ final class RecognitionOrchestrator: ObservableObject {
                             throw CancellationError()
                         }
 
-                        self.finalTranscript = processed.isEmpty ? basicResult : processed
-                        self.previewState.transcript = self.finalTranscript
+                        self.finalTranscript = processed.isEmpty ? textToProcess : processed
                         self.previewState.isPostProcessing = false
                         self.insertFinalText()
 
@@ -272,9 +287,8 @@ final class RecognitionOrchestrator: ObservableObject {
                     } catch {
                         // 超时或失败，回退到基础结果
                         Self.logger.info("LLM post-processing timeout or failed, using basic result")
-                        let processed = self.smartPostProcessor.processRulesOnly(text: basicResult)
-                        self.finalTranscript = processed.isEmpty ? basicResult : processed
-                        self.previewState.transcript = self.finalTranscript
+                        let processed = self.smartPostProcessor.processRulesOnly(text: textToProcess)
+                        self.finalTranscript = processed.isEmpty ? textToProcess : processed
                         self.previewState.isPostProcessing = false
                         self.previewState.hintMessage = "AI 优化超时，已插入原文"
                         self.insertFinalText()
@@ -285,8 +299,8 @@ final class RecognitionOrchestrator: ObservableObject {
                     }
                 }
             } else {
-                let processed = smartPostProcessor.processRulesOnly(text: basicResult)
-                finalTranscript = processed.isEmpty ? basicResult : processed
+                let processed = smartPostProcessor.processRulesOnly(text: finalResult)
+                finalTranscript = processed.isEmpty ? finalResult : processed
                 previewState.transcript = finalTranscript
                 insertFinalText()
             }

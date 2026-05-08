@@ -156,6 +156,8 @@ private struct PreviewOverlayView: View {
                     .lineLimit(3)
                     .truncationMode(.tail)
                     .fixedSize(horizontal: false, vertical: true)
+            } else if previewState.isPostProcessing {
+                postProcessingIndicator
             } else if let hintMessage = previewState.hintMessage {
                 Text(hintMessage)
                     .font(.system(size: 13, weight: .regular))
@@ -168,8 +170,8 @@ private struct PreviewOverlayView: View {
                 transcriptContent
             }
         }
-        .padding(.horizontal, transcriptMetrics.trimmedText.isEmpty ? 12 : 14)
-        .padding(.vertical, transcriptMetrics.trimmedText.isEmpty ? 9 : 10)
+        .padding(.horizontal, (previewState.isPostProcessing || transcriptMetrics.trimmedText.isEmpty) ? 12 : 14)
+        .padding(.vertical, (previewState.isPostProcessing || transcriptMetrics.trimmedText.isEmpty) ? 9 : 10)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .background(.ultraThinMaterial, in: Capsule(style: .continuous))
         .overlay(
@@ -191,6 +193,18 @@ private struct PreviewOverlayView: View {
             isActive: previewState.isRecording,
             isCompact: previewState.transcript.isEmpty
         )
+    }
+
+    private var postProcessingIndicator: some View {
+        HStack(spacing: 6) {
+            ProgressView()
+                .controlSize(.small)
+                .scaleEffect(0.75)
+
+            Text("AI 处理中")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(DVITheme.secondaryInk)
+        }
     }
 
     private var transcriptContent: some View {
