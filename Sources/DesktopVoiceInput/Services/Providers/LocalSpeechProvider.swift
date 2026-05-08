@@ -13,6 +13,7 @@ final class LocalSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable {
     private var revision = 0
     private var committedTranscript = ""
     private var currentSegmentTranscript = ""
+    private var lastNonEmptySegment = ""
     private var lastTranscriptLength = 0
 
     private static let logger = Logger(subsystem: "com.desktopvoiceinput", category: "LocalSpeech")
@@ -50,6 +51,7 @@ final class LocalSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable {
         self.revision = 0
         self.committedTranscript = ""
         self.currentSegmentTranscript = ""
+        self.lastNonEmptySegment = ""
         self.lastTranscriptLength = 0
 
         continuation.yield(.sessionStarted(mode: mode))
@@ -70,17 +72,23 @@ final class LocalSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable {
             let transcript = result.bestTranscription.formattedString
             let currentLength = transcript.count
 
-            if currentLength < Int(Double(self.lastTranscriptLength) * 0.6) && currentLength > 0 {
-                Self.logger.debug("New segment detected (length dropped >40%): old=\(self.lastTranscriptLength) new=\(currentLength)")
+            // 段落切换判定：长度回落（哪怕回落到 0）或完全清空都意味着 Apple Speech
+            // 认为上一段已经结束、新的段落开始。必须先把旧段落 commit，避免被覆盖丢失。
+            let isSegmentReset = currentLength == 0
+                || currentLength < Int(Double(self.lastTranscriptLength) * 0.6)
+            if isSegmentReset {
                 if !self.currentSegmentTranscript.isEmpty {
+                    Self.logger.debug("Segment reset: committing [\(self.currentSegmentTranscript, privacy: .public)] (old length=\(self.lastTranscriptLength), new length=\(currentLength))")
                     self.committedTranscript += self.currentSegmentTranscript
-                    Self.logger.debug("Committed segment: [\(self.currentSegmentTranscript, privacy: .public)]")
                 }
                 self.currentSegmentTranscript = transcript
             } else {
                 self.currentSegmentTranscript = transcript
             }
 
+            if !self.currentSegmentTranscript.isEmpty {
+                self.lastNonEmptySegment = self.currentSegmentTranscript
+            }
             self.lastTranscriptLength = currentLength
             let fullTranscript = self.committedTranscript + self.currentSegmentTranscript
 
@@ -88,7 +96,13 @@ final class LocalSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable {
 
             if result.isFinal {
                 self.cleanupRecognitionResources(cancelTask: false)
-                let finalText = self.committedTranscript + self.currentSegmentTranscript
+                // Final fallback：如果 final 回调时 current/committed 都已被清空，
+                // 回退到我们自己记录的 lastNonEmptySegment + committed。
+                var finalText = self.committedTranscript + self.currentSegmentTranscript
+                if finalText.isEmpty, !self.lastNonEmptySegment.isEmpty {
+                    Self.logger.debug("Final text empty, falling back to last non-empty segment: [\(self.lastNonEmptySegment, privacy: .public)]")
+                    finalText = self.committedTranscript + self.lastNonEmptySegment
+                }
                 Self.logger.debug("Final result: [\(finalText, privacy: .public)]")
                 self.continuation.yield(.finalTextReady(text: finalText))
                 self.continuation.yield(.sessionEnded)

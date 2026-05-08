@@ -13,8 +13,7 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
     private var revision = 0
     private var hasTerminatedSession = false
     private var hasEmittedFinalResult = false
-    private var committedTranscript = ""
-    private var activeSegmentTranscript = ""
+    private var latestTranscript = ""
     private var hasRequestedFinish = false
 
     override init() {
@@ -44,8 +43,7 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
         self.revision = 0
         self.hasTerminatedSession = false
         self.hasEmittedFinalResult = false
-        self.committedTranscript = ""
-        self.activeSegmentTranscript = ""
+        self.latestTranscript = ""
         self.hasRequestedFinish = false
         self.transport = RealtimeWebSocketTransport(
             request: request,
@@ -64,7 +62,7 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
                 guard !self.hasTerminatedSession else { return }
 
                 if self.hasRequestedFinish, !self.hasEmittedFinalResult {
-                    let finalText = self.currentTranscriptPreview()
+                    let finalText = self.latestTranscript
                     if !finalText.isEmpty {
                         Self.logger.debug("Emitting fallback final transcript on disconnect: \(finalText, privacy: .public)")
                         self.hasEmittedFinalResult = true
@@ -106,8 +104,8 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
             request: .init(
                 modelName: "bigmodel",
                 enableNonstream: true,
-                showUtterances: true,
-                resultType: "single",
+                showUtterances: false,
+                resultType: "full",
                 enableITN: true,
                 enableDDC: false,
                 enablePunc: true,
@@ -170,26 +168,23 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
         let code = json["code"] as? Int ?? json["status_code"] as? Int ?? -1
         let message = (json["message"] as? String) ?? (json["error"] as? String) ?? (json["msg"] as? String)
         if let message {
-            if hasRequestedFinish, !hasEmittedFinalResult {
-                let fallbackText = currentTranscriptPreview()
-                if !fallbackText.isEmpty {
-                    Self.logger.info("豆包返回错误但有部分结果，使用部分结果作为最终结果: \(fallbackText, privacy: .public)")
-                    hasEmittedFinalResult = true
-                    continuation.yield(.finalTextReady(text: fallbackText))
-                    continuation.yield(.sessionEnded)
-                    return
-                }
+            if hasRequestedFinish, !hasEmittedFinalResult, !latestTranscript.isEmpty {
+                Self.logger.info("豆包返回错误但有部分结果，使用部分结果作为最终结果: \(self.latestTranscript, privacy: .public)")
+                hasEmittedFinalResult = true
+                continuation.yield(.finalTextReady(text: latestTranscript))
+                continuation.yield(.sessionEnded)
+                return
             }
             continuation.yield(.sessionFailed(SessionFailureInfo(message: "豆包返回消息[\(code)]：\(message)")))
             continuation.yield(.sessionEnded)
             return
         }
 
-        if let result = json["result"] as? [String: Any], let transcript = DoubaoTranscriptPayload(resultObject: result), transcript.hasText {
-            let previewText = updatePreviewTranscript(with: transcript)
-            Self.logger.debug("Received JSON transcript. utterances=\(transcript.hasUtterances, privacy: .public) finalized=\(transcript.hasFinalizedUtterance, privacy: .public) finishRequested=\(self.hasRequestedFinish, privacy: .public) preview=\(previewText, privacy: .public)")
+        if let result = json["result"] as? [String: Any], let transcript = DoubaoTranscriptPayload(resultObject: result), !transcript.text.isEmpty {
+            latestTranscript = transcript.text
             revision += 1
-            continuation.yield(.partialTextUpdated(text: previewText, revision: revision))
+            Self.logger.debug("Received JSON transcript. finishRequested=\(self.hasRequestedFinish, privacy: .public) text=\(self.latestTranscript, privacy: .public)")
+            continuation.yield(.partialTextUpdated(text: latestTranscript, revision: revision))
             return
         }
 
@@ -213,25 +208,30 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
             return
         }
 
-        guard let transcript = response.transcript, transcript.hasText else { return }
+        guard let transcript = response.transcript, !transcript.text.isEmpty else {
+            if response.isTerminal, hasRequestedFinish, !hasEmittedFinalResult {
+                hasEmittedFinalResult = true
+                continuation.yield(.finalTextReady(text: latestTranscript))
+                emitSessionEndedIfNeeded()
+            }
+            return
+        }
 
-        let previewText = updatePreviewTranscript(with: transcript)
+        latestTranscript = transcript.text
+        revision += 1
 
         if response.isTerminal {
-            Self.logger.debug("Received binary terminal transcript. finalized=\(transcript.hasFinalizedUtterance, privacy: .public) finishRequested=\(self.hasRequestedFinish, privacy: .public) preview=\(previewText, privacy: .public)")
+            Self.logger.debug("Received terminal transcript. finishRequested=\(self.hasRequestedFinish, privacy: .public) text=\(self.latestTranscript, privacy: .public)")
             if hasRequestedFinish {
                 hasEmittedFinalResult = true
-                let finalText = currentTranscriptPreview()
-                continuation.yield(.finalTextReady(text: finalText))
+                continuation.yield(.finalTextReady(text: latestTranscript))
                 emitSessionEndedIfNeeded()
             } else {
-                revision += 1
-                continuation.yield(.partialTextUpdated(text: previewText, revision: revision))
+                continuation.yield(.partialTextUpdated(text: latestTranscript, revision: revision))
             }
         } else {
-            revision += 1
-            Self.logger.debug("Received binary transcript. utterances=\(transcript.hasUtterances, privacy: .public) finalized=\(transcript.hasFinalizedUtterance, privacy: .public) preview=\(previewText, privacy: .public)")
-            continuation.yield(.partialTextUpdated(text: previewText, revision: revision))
+            Self.logger.debug("Received partial transcript. text=\(self.latestTranscript, privacy: .public)")
+            continuation.yield(.partialTextUpdated(text: latestTranscript, revision: revision))
         }
     }
 
@@ -239,244 +239,6 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
         guard !hasTerminatedSession else { return }
         hasTerminatedSession = true
         continuation.yield(.sessionEnded)
-    }
-
-    private func updatePreviewTranscript(with transcript: DoubaoTranscriptPayload) -> String {
-        if transcript.hasUtterances {
-            if let finalizedText = transcript.finalizedText, !finalizedText.isEmpty {
-                let sanitizedFinalizedText = DoubaoTranscriptStabilizer.stabilize(
-                    incoming: sanitizeTranscript(finalizedText),
-                    previous: nil
-                )
-                if !sanitizedFinalizedText.isEmpty {
-                    committedTranscript = mergeOverlappingText(base: committedTranscript, incoming: sanitizedFinalizedText)
-                }
-            }
-
-            if let activeText = transcript.activeText, !activeText.isEmpty {
-                let sanitizedActiveText = DoubaoTranscriptStabilizer.stabilize(
-                    incoming: sanitizeTranscript(activeText),
-                    previous: activeSegmentTranscript
-                )
-                activeSegmentTranscript = reconcilePreview(existing: activeSegmentTranscript, incoming: sanitizedActiveText)
-            } else if transcript.hasFinalizedUtterance {
-                activeSegmentTranscript = ""
-            }
-
-            return currentTranscriptPreview()
-        }
-
-        guard let text = transcript.text else {
-            return currentTranscriptPreview()
-        }
-
-        return updatePreviewTranscript(with: text, isSegmentFinal: transcript.hasFinalizedUtterance)
-    }
-
-    private func updatePreviewTranscript(with incoming: String, isSegmentFinal: Bool) -> String {
-        let sanitizedIncoming = DoubaoTranscriptStabilizer.stabilize(
-            incoming: sanitizeTranscript(incoming),
-            previous: activeSegmentTranscript
-        )
-        guard !sanitizedIncoming.isEmpty else {
-            return currentTranscriptPreview()
-        }
-
-        let incomingSegment = extractCurrentSegment(from: sanitizedIncoming)
-        Self.logger.debug("updatePreview: committed=[\(self.committedTranscript, privacy: .public)] active=[\(self.activeSegmentTranscript, privacy: .public)] incoming=[\(sanitizedIncoming, privacy: .public)] extracted=[\(incomingSegment, privacy: .public)] segFinal=\(isSegmentFinal)")
-        activeSegmentTranscript = reconcilePreview(existing: activeSegmentTranscript, incoming: incomingSegment)
-
-        if isSegmentFinal {
-            committedTranscript = mergeOverlappingText(base: committedTranscript, incoming: activeSegmentTranscript)
-            activeSegmentTranscript = ""
-            Self.logger.debug("Segment committed: [\(self.committedTranscript, privacy: .public)]")
-            return committedTranscript
-        }
-
-        return currentTranscriptPreview()
-    }
-
-    private func sanitizeTranscript(_ text: String) -> String {
-        text.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func extractCurrentSegment(from incoming: String) -> String {
-        guard !committedTranscript.isEmpty else { return incoming }
-
-        if incoming.hasPrefix(committedTranscript) {
-            return sanitizeTranscript(String(incoming.dropFirst(committedTranscript.count)))
-        }
-
-        let committedKey = DoubaoTranscriptStabilizer.comparableKey(committedTranscript)
-        let incomingKey = DoubaoTranscriptStabilizer.comparableKey(incoming)
-        if committedKey.count >= 2, incomingKey.hasPrefix(committedKey) {
-            return sanitizeTranscript(dropComparablePrefix(committedKey.count, from: incoming))
-        }
-
-        if incoming.contains(committedTranscript), let range = incoming.range(of: committedTranscript) {
-            let suffix = incoming[range.upperBound...]
-            return sanitizeTranscript(String(suffix))
-        }
-
-        return incoming
-    }
-
-    private func reconcilePreview(existing: String, incoming: String) -> String {
-        guard !incoming.isEmpty else { return existing }
-
-        // Doubao's streaming hypothesis is replacement-oriented: each partial
-        // revises the current segment instead of appending to it. Replacing the
-        // active segment avoids duplicating old and new hypotheses together.
-        return incoming
-    }
-
-    private func mergeOverlappingText(base: String, incoming: String) -> String {
-        guard !base.isEmpty else { return incoming }
-        guard !incoming.isEmpty else { return base }
-
-        if incoming.hasPrefix(base) || incoming.contains(base) {
-            return incoming
-        }
-
-        if base.hasPrefix(incoming) || base.contains(incoming) {
-            return base
-        }
-
-        let baseKey = DoubaoTranscriptStabilizer.comparableKey(base)
-        let incomingKey = DoubaoTranscriptStabilizer.comparableKey(incoming)
-        if baseKey.count >= 2, incomingKey.hasPrefix(baseKey) {
-            return incoming
-        }
-
-        if incomingKey.count >= 2, baseKey.hasPrefix(incomingKey) {
-            return base
-        }
-
-        let baseCharacters = Array(base)
-        let incomingCharacters = Array(incoming)
-        let maxOverlap = min(baseCharacters.count, incomingCharacters.count)
-
-        for overlapLength in stride(from: maxOverlap, through: 1, by: -1) {
-            let baseSuffix = baseCharacters.suffix(overlapLength)
-            let incomingPrefix = incomingCharacters.prefix(overlapLength)
-            if Array(baseSuffix) == Array(incomingPrefix) {
-                return base + String(incomingCharacters.dropFirst(overlapLength))
-            }
-        }
-
-        let maxComparableOverlap = min(baseKey.count, incomingKey.count)
-        if maxComparableOverlap >= 2 {
-            for overlapLength in stride(from: maxComparableOverlap, through: 2, by: -1) {
-                let baseSuffix = String(baseKey.suffix(overlapLength))
-                let incomingPrefix = String(incomingKey.prefix(overlapLength))
-                if baseSuffix == incomingPrefix {
-                    return base + dropComparablePrefix(overlapLength, from: incoming)
-                }
-            }
-        }
-
-        return base + incoming
-    }
-
-    private func dropComparablePrefix(_ count: Int, from text: String) -> String {
-        guard count > 0 else { return text }
-
-        var remaining = count
-        var suffixStart = text.startIndex
-
-        for index in text.indices {
-            if DoubaoTranscriptStabilizer.isComparable(text[index]) {
-                remaining -= 1
-            }
-
-            suffixStart = text.index(after: index)
-            if remaining == 0 { break }
-        }
-
-        guard remaining == 0 else { return "" }
-        return String(text[suffixStart...])
-    }
-
-    private func currentTranscriptPreview() -> String {
-        guard !activeSegmentTranscript.isEmpty else { return committedTranscript }
-        return DoubaoTranscriptStabilizer.stabilize(
-            incoming: mergeOverlappingText(base: committedTranscript, incoming: activeSegmentTranscript),
-            previous: nil
-        )
-    }
-}
-
-enum DoubaoTranscriptStabilizer {
-    static func stabilize(incoming: String, previous: String?) -> String {
-        var result = incoming.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if let previous, !previous.isEmpty, result.hasPrefix(previous) {
-            let remainder = String(result.dropFirst(previous.count))
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if startsLikeBeginning(of: previous, text: remainder) {
-                result = remainder
-            }
-        }
-
-        return collapseAdjacentRepeats(in: result)
-    }
-
-    private static func startsLikeBeginning(of reference: String, text: String) -> Bool {
-        let referenceKey = comparableKey(reference)
-        let textKey = comparableKey(text)
-        guard referenceKey.count >= 3, textKey.count >= 3 else { return false }
-
-        let prefixLength = min(referenceKey.count, max(3, min(8, textKey.count)))
-        let prefix = String(referenceKey.prefix(prefixLength))
-        return textKey.hasPrefix(prefix)
-    }
-
-    private static func collapseAdjacentRepeats(in text: String) -> String {
-        var characters = Array(text)
-        var index = 0
-
-        while index < characters.count {
-            let remaining = characters.count - index
-            guard remaining >= 4 else { break }
-
-            var collapsedAtCurrentIndex = false
-            let maxLength = min(32, remaining / 2)
-
-            for length in stride(from: maxLength, through: 2, by: -1) {
-                let first = String(characters[index..<(index + length)])
-                let second = String(characters[(index + length)..<(index + length * 2)])
-                let firstKey = comparableKey(first)
-                guard firstKey.count >= 2, firstKey == comparableKey(second) else { continue }
-
-                characters.removeSubrange((index + length)..<(index + length * 2))
-                collapsedAtCurrentIndex = true
-                break
-            }
-
-            if !collapsedAtCurrentIndex {
-                index += 1
-            }
-        }
-
-        return String(characters).trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    static func comparableKey(_ text: String) -> String {
-        text
-            .lowercased()
-            .unicodeScalars
-            .filter { scalar in
-                !CharacterSet.whitespacesAndNewlines.contains(scalar)
-                    && !CharacterSet.punctuationCharacters.contains(scalar)
-                    && !CharacterSet.symbols.contains(scalar)
-            }
-            .map(String.init)
-            .joined()
-    }
-
-    static func isComparable(_ character: Character) -> Bool {
-        comparableKey(String(character)).isEmpty == false
     }
 }
 
@@ -624,49 +386,13 @@ private enum DoubaoFrameParser {
 }
 
 struct DoubaoTranscriptPayload {
-    let text: String?
-    let finalizedText: String?
-    let activeText: String?
-    let hasUtterances: Bool
-    let hasFinalizedUtterance: Bool
-
-    var hasText: Bool {
-        [text, finalizedText, activeText].contains { value in
-            guard let value else { return false }
-            return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-    }
+    let text: String
 
     init?(resultObject: [String: Any]) {
         let rawText = (resultObject["text"] as? String)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let utterances = resultObject["utterances"] as? [[String: Any]] ?? []
-
-        self.hasUtterances = !utterances.isEmpty
-        self.hasFinalizedUtterance = utterances.contains { ($0["definite"] as? Bool) == true }
-
-        if utterances.isEmpty {
-            self.text = rawText?.isEmpty == true ? nil : rawText
-            self.finalizedText = nil
-            self.activeText = nil
-        } else {
-            let finalized = utterances
-                .filter { ($0["definite"] as? Bool) == true }
-                .compactMap { $0["text"] as? String }
-                .joined()
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let active = utterances
-                .filter { ($0["definite"] as? Bool) != true }
-                .compactMap { $0["text"] as? String }
-                .joined()
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-
-            self.text = rawText?.isEmpty == true ? nil : rawText
-            self.finalizedText = finalized.isEmpty ? nil : finalized
-            self.activeText = active.isEmpty ? nil : active
-        }
-
-        guard hasText else { return nil }
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !rawText.isEmpty else { return nil }
+        self.text = rawText
     }
 }
 

@@ -208,18 +208,31 @@ private struct PreviewOverlayView: View {
     }
 
     private var embeddedWaveform: some View {
-        WaveformMeter(
-            level: previewState.audioLevel,
-            tint: ready,
-            isActive: previewState.isRecording,
-            isCompact: false
-        )
-        .scaleEffect(0.90)
-        .opacity(0.16)
-        .padding(.trailing, 3)
-        .padding(.bottom, 0)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        Group {
+            if previewState.isPostProcessing {
+                ProgressView()
+                    .controlSize(.small)
+                    .scaleEffect(0.75)
+                    .opacity(0.6)
+                    .padding(.trailing, 6)
+                    .padding(.bottom, 0)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            } else {
+                WaveformMeter(
+                    level: previewState.audioLevel,
+                    tint: ready,
+                    isActive: previewState.isRecording,
+                    isCompact: false
+                )
+                .scaleEffect(0.90)
+                .opacity(0.16)
+                .padding(.trailing, 3)
+                .padding(.bottom, 0)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+        }
     }
 
 }

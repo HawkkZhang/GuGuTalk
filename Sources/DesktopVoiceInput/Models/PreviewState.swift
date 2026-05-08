@@ -11,6 +11,7 @@ final class PreviewState: ObservableObject {
     @Published var errorMessage: String?
     @Published var audioLevel: Float = 0
     @Published var isRecording = false
+    @Published var isPostProcessing = false
     @Published var activeMode: RecognitionMode = .local
 
     var menuBarSymbolName: String {
@@ -29,6 +30,7 @@ final class PreviewState: ObservableObject {
         errorMessage = nil
         audioLevel = 0
         isRecording = false
+        isPostProcessing = false
         activeMode = .local
     }
 }

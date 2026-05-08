@@ -211,7 +211,17 @@ final class RecognitionOrchestrator: ObservableObject {
         case .partialTextUpdated(let text, _):
             previewState.transcript = text
         case .finalTextReady(let text):
-            let basicResult = postProcessor.finalize(text)
+            // 保底网：如果 provider 返回空 final 但 preview 气泡里有文字，用 preview 兜底
+            var finalText = text
+            if finalText.isEmpty {
+                let previewText = previewState.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !previewText.isEmpty {
+                    Self.logger.info("Final text empty but preview has content, using preview as fallback: [\(previewText, privacy: .public)]")
+                    finalText = previewText
+                }
+            }
+
+            let basicResult = postProcessor.finalize(finalText)
             if basicResult.isEmpty {
                 dismissQuietly(message: "没有识别到有效内容")
                 return
@@ -224,13 +234,55 @@ final class RecognitionOrchestrator: ObservableObject {
             if settings.postProcessingEnabled, settings.activePostProcessingPrompt != nil, settings.llmProviderConfig.isConfigured {
                 previewState.transcript = basicResult
                 previewState.message = "正在处理文本"
+                previewState.isPostProcessing = true
+
                 Task { @MainActor in
-                    let processed = await self.smartPostProcessor.process(
-                        text: basicResult, targetApp: targetApp, targetBundleID: targetBundleID
-                    )
-                    self.finalTranscript = processed.isEmpty ? basicResult : processed
-                    self.previewState.transcript = self.finalTranscript
-                    self.insertFinalText()
+                    do {
+                        let processed = try await withThrowingTaskGroup(of: String.self) { group in
+                            // LLM 处理任务
+                            group.addTask {
+                                await self.smartPostProcessor.process(
+                                    text: basicResult, targetApp: targetApp, targetBundleID: targetBundleID
+                                )
+                            }
+
+                            // 8 秒超时任务
+                            group.addTask {
+                                try await Task.sleep(for: .seconds(8))
+                                throw CancellationError()
+                            }
+
+                            // 返回第一个完成的结果
+                            if let result = try await group.next() {
+                                group.cancelAll()
+                                return result
+                            }
+                            throw CancellationError()
+                        }
+
+                        self.finalTranscript = processed.isEmpty ? basicResult : processed
+                        self.previewState.transcript = self.finalTranscript
+                        self.previewState.isPostProcessing = false
+                        self.insertFinalText()
+
+                        // LLM 完成后才 dismiss
+                        if !self.isSessionActive {
+                            self.scheduleDismiss(delay: 1.0)
+                        }
+                    } catch {
+                        // 超时或失败，回退到基础结果
+                        Self.logger.info("LLM post-processing timeout or failed, using basic result")
+                        let processed = self.smartPostProcessor.processRulesOnly(text: basicResult)
+                        self.finalTranscript = processed.isEmpty ? basicResult : processed
+                        self.previewState.transcript = self.finalTranscript
+                        self.previewState.isPostProcessing = false
+                        self.previewState.hintMessage = "AI 优化超时，已插入原文"
+                        self.insertFinalText()
+
+                        if !self.isSessionActive {
+                            self.scheduleDismiss(delay: 1.0)
+                        }
+                    }
                 }
             } else {
                 let processed = smartPostProcessor.processRulesOnly(text: basicResult)
@@ -272,7 +324,10 @@ final class RecognitionOrchestrator: ObservableObject {
         activeProvider = nil
         previewState.isRecording = false
 
-        scheduleDismiss(delay: previewState.errorMessage == nil ? 1.0 : 2.5)
+        // 如果正在 LLM 后处理，推迟 dismiss，等 LLM Task 完成后再调用
+        if !previewState.isPostProcessing {
+            scheduleDismiss(delay: previewState.errorMessage == nil ? 1.0 : 2.5)
+        }
     }
 
     private func forceEndSession() {
