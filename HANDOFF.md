@@ -2,29 +2,51 @@
 
 This file is the first-stop handoff note for switching between Codex, Claude Code, Xcode, and other development tools.
 
-## ⚠️ OPEN ISSUES - 2026-05-09
+## Recent Fixes - 2026-05-09
 
-### AI 后处理气泡样式问题（未解决）
+### 结束阶段误报“识别未完成，已插入部分结果”（已修复，待真实长句验证）
+
+**问题描述：**
+- 用户说一句话或稍长内容时，经常看到“识别未完成，已插入部分结果”。
+- 这句提示来自 `RecognitionOrchestrator` 的失败兜底逻辑：provider 发出 `sessionFailed`，但当前已有 partial 文本，于是应用把 partial 当作最终文本插入。
+
+**本轮定位：**
+- 千问 provider 的 `onDisconnected` 之前会把任何带 error 的 WebSocket 断开都上报为 `sessionFailed`，即使用户已经松手并发送了 `session.finish`。
+- 豆包 provider 在 `finishAudio()` 后的断开阶段，虽然会尝试用 `latestTranscript` 兜底发 final，但仍可能继续往下走到断开错误分支。
+- 编排层收到“已经有 final 之后的失败事件”时，之前仍可能把会话改成失败状态。
+
+**本轮修复：**
+1. 千问：增加 `latestTranscript` 和 `hasTerminatedSession`，结束阶段断开时优先发 final 并正常结束，不再误报失败。
+2. 豆包：`hasRequestedFinish` 或已发 final 后的断开直接正常结束，不再继续上报连接失败。
+3. 编排层：如果 `finalTranscript` 已经生成，忽略后到的 provider failure，避免成功插入后又显示失败。
+4. AI 后处理成功完成后清空 overlay transcript，并在插入成功后立即关闭气泡；不再显示“已插入”状态，也不再重新展示大段识别结果。
+
+**验证：**
+- `swift test` passed: 8 tests
+- Debug `xcodebuild` passed
+- Release `xcodebuild` passed; latest build installed and launched at `/Applications/GuGuTalk.app`
+
+### AI 后处理气泡样式问题（已修复，待用户体验确认）
 
 **问题描述：**
 - "AI 处理中"状态的气泡大小不正确
 - 用户期望：应该像其他系统状态（波形、提示）那样是**小气泡**
-- 当前状态：气泡大小仍然与识别结果的大气泡一致
+- 原因：后处理开始时 `RecognitionOrchestrator` 会保留最终识别文本在 `PreviewState.transcript` 中，同时设置 `isPostProcessing = true`。旧的 overlay 尺寸计算先读取非空 transcript，因此仍按“识别结果大气泡”计算大小；尺寸监听也没有监听 `isPostProcessing`，所以状态切换时不会主动缩回。
 
-**已尝试的修复：**
-1. 修改了 padding 逻辑，让 `isPostProcessing` 使用 12/9 的小 padding
-2. 尝试了 `.fixedSize()` 让气泡自适应宽度
-3. 但用户反馈仍然不正确
+**本轮修复：**
+1. `PreviewOverlayController.bind()` 增加监听 `PreviewState.isPostProcessing`，AI 处理状态变化会触发 overlay 重新计算尺寸。
+2. `panelSize(for:)` 中将 `isPostProcessing` 提前到 transcript 尺寸计算之前，固定返回小气泡尺寸 `172x54`。
+3. 为 `isPostProcessing` 状态增加轻柔尺寸动画，避免从结果气泡切换到处理气泡时突兀跳变。
 
 **相关代码：**
 - `Sources/DesktopVoiceInput/Services/PreviewOverlayController.swift:149-188`
 - `PreviewState.isPostProcessing` 状态
 - `postProcessingIndicator` 视图
 
-**下一步建议：**
-- 需要重新理解"系统状态气泡"的确切样式
-- 可能需要查看波形状态（waveform）的完整实现作为参考
-- 或者考虑将"AI 处理中"作为 `hintMessage` 而不是独立状态
+**验证：**
+- `swift test` passed: 8 tests
+- Debug `xcodebuild` passed
+- Release `xcodebuild` passed; latest build installed and launched at `/Applications/GuGuTalk.app`
 
 ---
 

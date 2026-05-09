@@ -70,6 +70,11 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
                     }
                 }
 
+                if self.hasRequestedFinish || self.hasEmittedFinalResult {
+                    self.emitSessionEndedIfNeeded()
+                    return
+                }
+
                 guard let error else {
                     self.emitSessionEndedIfNeeded()
                     return

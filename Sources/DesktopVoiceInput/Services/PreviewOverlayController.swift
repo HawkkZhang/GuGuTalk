@@ -51,9 +51,14 @@ final class PreviewOverlayController {
             }
             .store(in: &cancellables)
 
-        Publishers.CombineLatest3(previewState.$transcript.removeDuplicates(), previewState.$errorMessage.removeDuplicates(), previewState.$hintMessage.removeDuplicates())
+        Publishers.CombineLatest4(
+            previewState.$transcript.removeDuplicates(),
+            previewState.$errorMessage.removeDuplicates(),
+            previewState.$hintMessage.removeDuplicates(),
+            previewState.$isPostProcessing.removeDuplicates()
+        )
             .receive(on: RunLoop.main)
-            .sink { [weak self] _, _, _ in
+            .sink { [weak self] _, _, _, _ in
                 guard let self, self.previewState.isVisible else { return }
                 self.updateFrame(animated: true)
             }
@@ -104,6 +109,10 @@ final class PreviewOverlayController {
 
         if state.hintMessage != nil {
             return NSSize(width: 240, height: 54)
+        }
+
+        if state.isPostProcessing {
+            return NSSize(width: 172, height: 54)
         }
 
         let metrics = TranscriptLayoutMetrics(text: state.transcript)
@@ -183,6 +192,7 @@ private struct PreviewOverlayView: View {
         .preferredColorScheme(settings.appearancePreference.colorScheme)
         .animation(.smooth(duration: 0.24), value: previewState.transcript)
         .animation(.smooth(duration: 0.24), value: previewState.errorMessage)
+        .animation(.smooth(duration: 0.20), value: previewState.isPostProcessing)
         .animation(.smooth(duration: 0.20), value: previewState.isRecording)
     }
 

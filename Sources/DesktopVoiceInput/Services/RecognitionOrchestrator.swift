@@ -278,11 +278,10 @@ final class RecognitionOrchestrator: ObservableObject {
 
                         self.finalTranscript = processed.isEmpty ? textToProcess : processed
                         self.previewState.isPostProcessing = false
-                        self.insertFinalText()
-
-                        // LLM 完成后才 dismiss
-                        if !self.isSessionActive {
-                            self.scheduleDismiss(delay: 1.0)
+                        self.previewState.transcript = ""
+                        self.previewState.hintMessage = nil
+                        if self.insertFinalText() {
+                            self.dismissNow()
                         }
                     } catch {
                         // 超时或失败，回退到基础结果
@@ -290,10 +289,9 @@ final class RecognitionOrchestrator: ObservableObject {
                         let processed = self.smartPostProcessor.processRulesOnly(text: textToProcess)
                         self.finalTranscript = processed.isEmpty ? textToProcess : processed
                         self.previewState.isPostProcessing = false
+                        self.previewState.transcript = ""
                         self.previewState.hintMessage = "AI 优化超时，已插入原文"
-                        self.insertFinalText()
-
-                        if !self.isSessionActive {
+                        if self.insertFinalText(), !self.isSessionActive {
                             self.scheduleDismiss(delay: 1.0)
                         }
                     }
@@ -311,7 +309,9 @@ final class RecognitionOrchestrator: ObservableObject {
             let hadContent = !finalTranscript.isEmpty || !currentTranscript.isEmpty
 
             if hadContent {
-                if finalTranscript.isEmpty && !currentTranscript.isEmpty {
+                if !finalTranscript.isEmpty {
+                    Self.logger.info("Ignoring provider failure after final transcript was already produced")
+                } else if !currentTranscript.isEmpty {
                     Self.logger.info("Session failed but have partial results, attempting to use them as final")
                     finalTranscript = smartPostProcessor.processRulesOnly(text: currentTranscript)
                     previewState.transcript = finalTranscript
@@ -357,16 +357,19 @@ final class RecognitionOrchestrator: ObservableObject {
         scheduleDismiss(delay: 1.0)
     }
 
-    private func insertFinalText() {
+    @discardableResult
+    private func insertFinalText() -> Bool {
         previewState.message = "正在插入到当前输入位置"
         let result = textInsertionService.insert(text: finalTranscript)
         lastInsertionResult = result
         if result.succeeded {
             previewState.message = "已插入到当前应用"
+            return true
         } else {
             previewState.errorMessage = result.failureReason
             lastErrorMessage = result.failureReason
             scheduleDismiss(delay: 3.0)
+            return false
         }
     }
 
@@ -411,6 +414,13 @@ final class RecognitionOrchestrator: ObservableObject {
             self.previewState.isVisible = false
             self.previewState.resetToIdle()
         }
+    }
+
+    private func dismissNow() {
+        dismissTask?.cancel()
+        dismissTask = nil
+        previewState.isVisible = false
+        previewState.resetToIdle()
     }
 
     private func friendlyErrorMessage(_ error: Error) -> String {

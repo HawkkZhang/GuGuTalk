@@ -9,8 +9,10 @@ final class QwenSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable {
     private var revision = 0
     private var endpointingPolicy: EndpointingPolicy = .voiceActivityDetection
     private var accumulatedTranscript = ""
+    private var latestTranscript = ""
     private var hasRequestedFinish = false
     private var hasEmittedFinalResult = false
+    private var hasTerminatedSession = false
 
     override init() {
         var continuation: AsyncStream<TranscriptEvent>.Continuation?
@@ -36,8 +38,10 @@ final class QwenSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable {
         self.revision = 0
         self.endpointingPolicy = config.endpointing
         self.accumulatedTranscript = ""
+        self.latestTranscript = ""
         self.hasRequestedFinish = false
         self.hasEmittedFinalResult = false
+        self.hasTerminatedSession = false
         self.transport = RealtimeWebSocketTransport(
             request: request,
             onMessage: { [weak self] message in
@@ -53,9 +57,28 @@ final class QwenSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable {
                 }
             },
             onDisconnected: { [weak self] error in
-                guard let self, let error else { return }
+                guard let self else { return }
+
+                if self.hasRequestedFinish || self.hasEmittedFinalResult {
+                    if !self.hasEmittedFinalResult {
+                        let finalText = self.latestTranscript.isEmpty ? self.accumulatedTranscript : self.latestTranscript
+                        if !finalText.isEmpty {
+                            self.hasEmittedFinalResult = true
+                            self.continuation.yield(.finalTextReady(text: finalText))
+                        }
+                    }
+
+                    self.emitSessionEndedIfNeeded()
+                    return
+                }
+
+                guard let error else {
+                    self.emitSessionEndedIfNeeded()
+                    return
+                }
+
                 self.continuation.yield(.sessionFailed(SessionFailureInfo(message: "千问连接中断：\(error.localizedDescription)")))
-                self.continuation.yield(.sessionEnded)
+                self.emitSessionEndedIfNeeded()
             }
         )
         transport?.connect()
@@ -92,7 +115,7 @@ final class QwenSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable {
 
     func cancel() async {
         transport?.close()
-        continuation.yield(.sessionEnded)
+        emitSessionEndedIfNeeded()
     }
 
     private func handleMessage(_ text: String) {
@@ -104,10 +127,12 @@ final class QwenSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable {
             case "conversation.item.input_audio_transcription.text":
                 revision += 1
                 let turnText = (event.stash ?? "") + (event.text ?? "")
-                continuation.yield(.partialTextUpdated(text: accumulatedTranscript + turnText, revision: revision))
+                latestTranscript = accumulatedTranscript + turnText
+                continuation.yield(.partialTextUpdated(text: latestTranscript, revision: revision))
             case "conversation.item.input_audio_transcription.completed":
                 let turnResult = event.transcript ?? event.text ?? ""
                 accumulatedTranscript += turnResult
+                latestTranscript = accumulatedTranscript
                 if hasRequestedFinish && !hasEmittedFinalResult {
                     hasEmittedFinalResult = true
                     continuation.yield(.finalTextReady(text: accumulatedTranscript))
@@ -118,26 +143,35 @@ final class QwenSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable {
             case "conversation.item.input_audio_transcription.failed":
                 let message = event.error?.message ?? event.message ?? "识别失败"
                 continuation.yield(.sessionFailed(SessionFailureInfo(message: "千问识别失败：\(message)")))
-                continuation.yield(.sessionEnded)
+                emitSessionEndedIfNeeded()
             case "session.created":
                 break
             case "session.finished":
-                if hasRequestedFinish && !hasEmittedFinalResult && !accumulatedTranscript.isEmpty {
-                    hasEmittedFinalResult = true
-                    continuation.yield(.finalTextReady(text: accumulatedTranscript))
+                if hasRequestedFinish && !hasEmittedFinalResult {
+                    let finalText = latestTranscript.isEmpty ? accumulatedTranscript : latestTranscript
+                    if !finalText.isEmpty {
+                        hasEmittedFinalResult = true
+                        continuation.yield(.finalTextReady(text: finalText))
+                    }
                 }
-                continuation.yield(.sessionEnded)
+                emitSessionEndedIfNeeded()
             case "error":
                 let message = event.message ?? event.error?.message ?? "未知错误"
                 continuation.yield(.sessionFailed(SessionFailureInfo(message: "千问识别失败：\(message)")))
-                continuation.yield(.sessionEnded)
+                emitSessionEndedIfNeeded()
             default:
                 break
             }
         } catch {
             continuation.yield(.sessionFailed(SessionFailureInfo(message: "千问响应解析失败：\(error.localizedDescription)")))
-            continuation.yield(.sessionEnded)
+            emitSessionEndedIfNeeded()
         }
+    }
+
+    private func emitSessionEndedIfNeeded() {
+        guard !hasTerminatedSession else { return }
+        hasTerminatedSession = true
+        continuation.yield(.sessionEnded)
     }
 
     private static func makeRealtimeURL(endpoint: String, model: String) -> URL? {
