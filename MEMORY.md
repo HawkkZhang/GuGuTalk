@@ -53,7 +53,7 @@
 - DesktopVoiceInput is a macOS menu bar voice input app prototype.
 - Local Apple Speech, Qwen realtime, and Doubao realtime integrations have all been implemented.
 - The current stable checkpoint is tag `stable-2026-05-01`, commit `960f2b3`.
-- The latest pushed checkpoint on `main` is `5521384 记录豆包流式修复和启动入口方案`.
+- The latest synced checkpoint is on `main`; use `git log --oneline -1` for the exact current commit.
 - GitHub repository: `https://github.com/HawkkZhang/GuGuTalk`.
 - Local development branch is currently `main`, tracking `origin/main`.
 - Product name and GitHub repository are currently `GuGuTalk`; Xcode project and internal target names still include `DesktopVoiceInput`.
@@ -71,19 +71,24 @@
 - Doubao `bigmodel_async` with `result_type = "full"` should normally be treated as provider-owned full replacement text. However, real logs showed terminal final can occasionally drop a stable prefix that existed in the immediately previous partial/full update, such as previous `Gemini 之前还` followed by terminal raw `之前还挺好用的。`. The client now protects only this terminal-finish edge case with overlap-based prefix repair and logs `repairedFromPrevious` plus `emitted`.
 - Local DMG artifacts must be generated with `./scripts/package-dmg.sh` and stored only in `dist/dmg/`. Do not create new DMGs in the repo root, `Packages/`, Desktop, Downloads, or random temporary folders.
 
-## Latest Synced State - 2026-05-08
+## Latest Synced State - 2026-05-10
 
-These changes have been pushed to GitHub on `main` at commit `5521384`:
+These changes are synced to GitHub on `main`:
 
-- Doubao streaming result handling now parses `utterances` explicitly.
-- `definite=true` utterances are committed, while `definite=false` utterances remain as the active preview segment.
-- This is intended to fix extra duplicated words caused by treating the whole `result.text` as final whenever any utterance was marked definite.
-- Doubao `enable_ddc` should remain off for this issue. It is a semantic smoothing feature for real spoken filler/repetition, not a fix for client-side streaming result assembly.
-- A temporary SwiftUI Settings-opening bridge was attempted so app launch/reopen can request the settings window.
-- The preferred next architecture is a dedicated native GuGuTalk settings/onboarding window, not relying on SwiftUI `Settings {}` as the app's primary entry window.
-- After app launch or reopen from Finder/Launchpad, expected UX is:
+- GitHub repository name is `GuGuTalk`: `https://github.com/HawkkZhang/GuGuTalk`.
+- App entry now uses a dedicated AppKit `NSWindow` settings/onboarding window, not SwiftUI `Settings {}` as the primary UI.
+- App launch/reopen behavior:
   - missing required permissions -> open Permissions page
   - permissions ready -> open General/Home page
+- Default hotkeys in code:
+  - hold-to-talk -> `Fn`, enabled by default
+  - toggle-to-talk -> `⌥ Space`, enabled by default
+- Doubao streaming result handling currently uses `result_type = "full"` and treats provider `result.text` as the full replacement transcript for partial and final updates.
+- Official Doubao `bigmodel_async` reference: `https://www.volcengine.com/docs/6561/1354869?lang=zh`. The relevant contract is `result_type = "full"` for full transcript refresh, while `single` is incremental and does not include previous segments.
+- A previous `result_type = "single"` / `utterances[].definite` assembler approach was tried, then deliberately retired because client-side assembly can create duplicate or missing text when provider refresh semantics shift.
+- `show_utterances = true` remains enabled for diagnostics and fallback parsing only. When `result.text` exists, it is the source of truth.
+- Doubao terminal final has one conservative protection: if the terminal final drops a stable prefix seen in the previous update, `DoubaoTranscriptRepair` may repair that terminal-finish edge case using overlap matching.
+- Occasional one-or-two-character repetitions are still a known verification target. Do not add broad local dedupe until `[DoubaoTranscript]` logs prove whether the raw provider `result.text` or local processing created the repetition.
 
 ## Latest Local Fixes - 2026-05-10
 
@@ -166,8 +171,8 @@ These changes have been pushed to GitHub on `main` at commit `5521384`:
 
 ### Stability / Compatibility
 
-- Settings/onboarding entry is currently a product architecture priority. The app should not feel like it disappears into the menu bar when launched from Finder or Launchpad.
-- Use one dedicated settings/onboarding window for app launch, menu bar Settings, and permission guidance.
+- Settings/onboarding now uses a dedicated AppKit settings window for app launch, menu bar Settings, and permission guidance.
+- Continue verifying launch/reopen behavior on packaged DMGs, different macOS versions, and local signing/Gatekeeper states.
 - More compatibility testing is needed across common macOS apps and input fields.
 - Text insertion compatibility is a top-priority product risk. The app must not merely "insert text"; it needs reliable per-target insertion behavior across native text fields, browser editors, rich text editors, Electron apps, and unusual web inputs.
 - Browser / web rich-text editors such as Gemini, ChatGPT, Notion, Google Docs, Feishu, and Slack should generally prefer paste-style insertion because Accessibility `AXValue` can expose placeholder / hint / hidden editor text as if it were real content.
@@ -191,8 +196,9 @@ These changes have been pushed to GitHub on `main` at commit `5521384`:
 
 ### Release Readiness
 
-- App signing is not set up yet.
-- Packaging / distribution / install flow is not set up yet.
+- Local development signing exists via `GuGuTalk Local Code Signing`, but production Developer ID signing and notarization are not set up yet.
+- Local DMG packaging is set up through `./scripts/package-dmg.sh` and writes artifacts to `dist/dmg/`.
+- Public release distribution, notarization, and update delivery are not set up yet.
 - Update mechanism is not implemented.
 
 ### 智能后处理（Phase 2 & 3 未完成）
@@ -215,8 +221,8 @@ These changes have been pushed to GitHub on `main` at commit `5521384`:
 
 ## Immediate Priorities
 
-1. Replace SwiftUI `Settings {}` as the primary entry UI with a dedicated native settings/onboarding window.
-2. Verify Doubao streaming duplicate fix with real usage and logs.
+1. Verify Doubao occasional repeated-character reports with `[DoubaoTranscript]` raw/normalized/emitted logs before changing result handling again.
+2. Continue testing the dedicated settings/onboarding window from Finder, Launchpad, `/Applications`, and menu bar Settings.
 3. Add clearer validation and error handling for Doubao / Qwen configuration.
 4. Improve provider visibility and fallback messaging.
 5. Expand tests around hotkeys, insertion, and provider switching.

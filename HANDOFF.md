@@ -369,31 +369,25 @@ This file is the first-stop handoff note for switching between Codex, Claude Cod
 - Stable tag: `stable-2026-05-01`
 - Stable commit: `960f2b3`
 - GitHub repository: `https://github.com/HawkkZhang/GuGuTalk`
-- Latest pushed checkpoint on `main`: `64107b2 修复识别收尾和 AI 后处理气泡`
+- Latest synced checkpoint is on `main`; use `git log --oneline -1` for the exact current commit.
 - Local branch at time of writing: `main`
 - Remote branch: `origin/main`
 
 If local work gets messy, use the stable tag as the known-good restore point.
 
-## Latest Synced State - 2026-05-09
+## Latest Synced State - 2026-05-10
 
-The latest pushed code checkpoint on `main` is commit `64107b2`.
+The latest synced code checkpoint is on `main`; use `git log --oneline -1` for the exact commit.
 
-Implemented and locally tested:
+Current implemented state:
 
-- Doubao streaming transcript handling was changed to follow the official `utterances[].definite` semantics more closely:
-  - `definite=true` utterances are treated as committed text.
-  - `definite=false` utterances are treated as the current mutable preview.
-  - This avoids committing the entire `result.text` too early and then duplicating active text when later partials arrive.
-- Conservative short-repeat stabilization was expanded for Doubao to reduce accidental local duplication while preserving normal single-character reduplication such as `试试`.
-- `swift test` passed with 12 tests after these changes.
-
-WIP / not final:
-
-- A bridge-based attempt was added to open the SwiftUI `Settings` scene when the app is launched or reopened from Finder.
-- The user correctly questioned whether this is the clean product architecture.
-- Recommended next step for Claude Code: replace SwiftUI `Settings {}` as the primary app UI with a dedicated native app window for GuGuTalk settings/onboarding. Finder launch, menu bar "设置", and permission guidance should all open the same dedicated window.
-- The bridge approach may remain as temporary wiring only if needed, but should not be treated as the long-term solution.
+- Doubao currently uses `result_type = "full"` and treats provider `result.text` as the full replacement transcript.
+- Official Doubao `bigmodel_async` reference: `https://www.volcengine.com/docs/6561/1354869?lang=zh`. The relevant contract is `result_type = "full"` for full transcript refresh, while `single` is incremental and does not include previous segments.
+- `show_utterances = true` remains enabled for diagnostics and fallback parsing, but the client no longer assembles normal transcript text from `utterances[].definite` when `result.text` is present.
+- The earlier `result_type = "single"` / local utterance assembler approach was tried and then retired because it increased the risk of client-side duplicate or missing text.
+- Terminal final has a narrow prefix-repair guard only for the observed edge case where Doubao terminal `result.text` drops a stable prefix from the previous update.
+- Occasional repeated-character reports still need log-based verification. Check `[DoubaoTranscript] raw`, `normalized`, and `emitted` before adding any new local correction.
+- The primary settings/onboarding entry now uses a dedicated AppKit `NSWindow`, not SwiftUI `Settings {}` or a bridge-based settings scene.
 
 Desired app-entry behavior:
 
@@ -444,8 +438,8 @@ When switching tools, update `HANDOFF.md` if the next step, risk, or known-good 
 The app currently has:
 
 - a SwiftUI/AppKit menu bar shell
-- settings UI with tabs for common settings, cloud services, and permissions
-- app-entry settings guidance is being redesigned: every app launch/reopen should show settings/onboarding, with Permissions selected when required permissions are missing
+- settings UI with pages for input, post-processing, and permissions
+- app-entry settings guidance is implemented with a dedicated settings/onboarding window; every app launch/reopen should show that window, with Permissions selected when required permissions are missing
 - two shortcut modes:
   - hold-to-talk
   - press-once-to-start, press-again-to-stop
@@ -478,7 +472,7 @@ Latest local fix:
 
 ## Known Risks
 
-- Settings/onboarding architecture is currently in transition. SwiftUI's `Settings` scene is awkward for "open the app and show the main window" behavior because `openSettings()` is only available from SwiftUI environment. Prefer a dedicated app window for the next implementation pass.
+- Settings/onboarding architecture now uses a dedicated AppKit settings window. Keep verifying Finder/Launchpad/menu bar entry behavior on packaged builds and different macOS/signing states.
 - The locally signed `/Applications/GuGuTalk.app` is for development testing. It may still be blocked by Gatekeeper when double-clicked because the certificate is self-signed; launching via `/Applications/GuGuTalk.app/Contents/MacOS/DesktopVoiceInput` is currently the most reliable local test path.
 - Do not assume hotkeys are fully stable. Dual hotkey mode still needs testing and polish.
 - If hold-to-talk is still cut off, inspect logs for `HotkeyManager` release events versus `RecognitionOrchestrator` timeout/provider events. A cutoff without release should now show whether it is provider failure, sendAudio failure, or a new lifecycle bug.
@@ -492,15 +486,14 @@ Latest local fix:
 
 ## Next Recommended Work
 
-1. Replace the SwiftUI `Settings` scene with a dedicated native app window for settings/onboarding, and route Finder launch, app reopen, menu bar Settings, and permission guidance into that single window.
-2. Verify Doubao streaming behavior with real speech logs after the `utterances[].definite` parsing change.
+1. Verify Doubao occasional repeated-character reports with real `[DoubaoTranscript]` logs before changing result handling again.
+2. Continue testing the dedicated settings/onboarding window from Finder, Launchpad, `/Applications`, and menu bar Settings.
 3. Stabilize hotkey state transitions.
 4. Harden the text insertion pipeline for browsers, rich-text editors, Electron apps, and native text fields.
-5. Add self-protection so settings/internal windows cannot receive dictated text.
-6. Improve provider configuration validation before a recording session starts.
-7. Improve provider visibility in the menu bar console and errors.
-8. Add automated tests for hotkeys, insertion guards, and provider selection.
-9. Eventually set up signing, packaging, and release artifacts.
+5. Improve provider configuration validation before a recording session starts.
+6. Improve provider visibility in the menu bar console and errors.
+7. Add automated tests for hotkeys, insertion guards, and provider selection.
+8. Eventually set up signing, packaging, and release artifacts.
 
 ## Suggested Prompt For Another AI Tool
 
@@ -509,11 +502,10 @@ Use this when opening Claude Code or another coding agent:
 ```text
 Please first read PRODUCT.md, DESIGN.md, MEMORY.md, HANDOFF.md, README.md, and the latest git log.
 This is a macOS SwiftUI/AppKit voice input app named GuGuTalk / DesktopVoiceInput.
-Continue from main at or after commit 64107b2.
-Start by replacing the current SwiftUI Settings scene entry flow with a dedicated native settings/onboarding window for GuGuTalk.
-Route Finder/Launchpad app open, app reopen, menu bar Settings, and permission guidance into the same window.
-If permissions are missing, open that window to Permissions; otherwise open General/Home.
-Preserve the Doubao utterances[].definite streaming handling unless real logs prove it wrong.
+Continue from the latest `main`.
+The app already uses a dedicated AppKit settings/onboarding window for Finder/Launchpad app open, app reopen, menu bar Settings, and permission guidance.
+If permissions are missing, that window should open to Permissions; otherwise it should open General/Home.
+Preserve the current Doubao `result_type = "full"` strategy unless real `[DoubaoTranscript]` logs prove local processing is wrong.
 Do not overwrite uncommitted changes if any exist in the local checkout.
 Respect the native macOS design direction and the known risks in HANDOFF.md.
 Before editing, inspect the relevant files and summarize the intended change.
