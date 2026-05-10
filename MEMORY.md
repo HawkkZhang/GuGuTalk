@@ -1,8 +1,8 @@
 # Project Memory
 
-## ⚠️ CRITICAL STATUS - 2026-05-07
+## Historical Critical Permission Issues - 2026-05-07
 
-**权限流程曾导致应用不可用。Codex 已做一轮修复并通过 Release 编译，已安装到 `/Applications/GuGuTalk.app`，仍需用户本机人工验证权限弹窗与授权刷新。**
+**权限流程曾导致应用不可用。相关修复已经进入当前代码和打包流程；后续用户测试没有再确认同类权限阻塞。这里保留为历史风险和回归测试背景。**
 
 ### 严重问题
 
@@ -22,7 +22,7 @@
    - 症状：系统设置中已授权，应用仍显示"未授权"
    - 已定位：辅助功能/输入监控需要稳定签名和正确跳转；麦克风在 Hardened Runtime 下还必须具备 `com.apple.security.device.audio-input` entitlement
    - 当前处理：Release 构建使用本地稳定签名 `GuGuTalk Local Code Signing`；新增 `Config/DesktopVoiceInput.entitlements`；刷新检查统一走 AppModel，刷新权限后同步热键状态
-   - 状态：需要用户验证修复是否有效
+   - 状态：后续用户测试基本恢复；仍作为权限回归风险保留
 
 ### 最近的修改（2026-05-07）
 
@@ -36,8 +36,7 @@
 - 启用 Hardened Runtime（尝试修复权限检测）
 - 启用代码签名（现为本地稳定证书 `GuGuTalk Local Code Signing`，不再依赖 ad-hoc）
 - 添加 `Config/DesktopVoiceInput.entitlements`，包含麦克风音频输入 entitlement
-- 首次启动会自动打开设置窗口；缺权限时直接进入“权限”页，避免新用户误以为菜单栏应用消失
-- 移除自动打开设置窗口逻辑（导致问题 2）
+- 首次启动会自动打开独立设置窗口；缺权限时直接进入“权限”页，避免新用户误以为菜单栏应用消失
 - 添加"刷新检查"按钮
 - 曾添加"我已授权，继续使用"按钮（已移除）
 
@@ -89,6 +88,7 @@ These changes are synced to GitHub on `main`:
 - `show_utterances = true` remains enabled for diagnostics and fallback parsing only. When `result.text` exists, it is the source of truth.
 - Doubao terminal final has one conservative protection: if the terminal final drops a stable prefix seen in the previous update, `DoubaoTranscriptRepair` may repair that terminal-finish edge case using overlap matching.
 - Occasional one-or-two-character repetitions are still a known verification target. Do not add broad local dedupe until `[DoubaoTranscript]` logs prove whether the raw provider `result.text` or local processing created the repetition.
+- Documentation audit completed on 2026-05-10: README, DESIGN, CONTRIBUTING, BUGS, MEMORY, and HANDOFF have been aligned with the current implementation for macOS target, hotkeys, AppKit settings window, Doubao `result_type = "full"`, custom controls, local test coverage, and self-text-field insertion behavior.
 
 ## Latest Local Fixes - 2026-05-10
 
@@ -136,7 +136,8 @@ These changes are synced to GitHub on `main`:
 
 ### Safety / Anti-Footgun
 
-- Prevent the app from inserting recognized text into its own settings window or other internal UI.
+- GuGuTalk should allow voice input inside its own editable text fields, including prompts and provider configuration fields.
+- Do not insert into GuGuTalk itself when the focused element is not editable, and keep global hotkeys suspended while recording shortcuts.
 - Add stronger guards so recording / settings editing / text insertion do not interfere with one another.
 - Validate cloud provider settings earlier, before runtime, to reduce handshake-time failures.
 
@@ -187,7 +188,7 @@ These changes are synced to GitHub on `main`:
 ### Testing
 
 - Test coverage is still very light.
-- Current tests mostly cover transcript post-processing only.
+- Current tests mostly cover transcript post-processing, Doubao transcript parsing, and terminal-final prefix repair.
 - Missing automated tests for:
   - hotkey state transitions
   - provider fallback flow

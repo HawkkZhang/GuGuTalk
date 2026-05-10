@@ -43,11 +43,11 @@ spacing:
 components:
   button-primary:
     backgroundColor: "{colors.icon-aqua}"
-    textColor: "{colors.surface-panel-light}"
+    textColor: "{colors.surface-panel}"
     rounded: "{rounded.sm}"
     padding: "6px 12px"
   panel:
-    backgroundColor: "{colors.surface-panel-light}"
+    backgroundColor: "{colors.surface-panel}"
     textColor: "{colors.text-primary}"
     rounded: "{rounded.md}"
 ---
@@ -63,7 +63,7 @@ Desktop Voice Input should feel like a crafted Mac companion built around the Gu
 The system rejects flashy AI styling, web-dashboard density, game-panel drama, and decorative effects that make simple actions feel loud.
 
 **Key Characteristics:**
-- Native macOS controls and system font.
+- Native macOS window behavior, system font, and Mac-like custom controls.
 - Light aqua surfaces with icon-aqua as the primary action and selection color.
 - Compact panels with shallow elevation and clear dividers.
 - Smooth state feedback without ornamental motion.
@@ -147,7 +147,7 @@ Depth is conveyed through solid surfaces, subtle borders, and small shadows. Avo
 
 ### Switches
 - **Use case:** Binary enable or disable settings only, such as turning a shortcut mode on or off.
-- **Style:** Use native macOS switch toggles with the app accent tint. Do not represent binary enablement as segmented controls, buttons, or custom chips.
+- **Style:** Use the project `DVISwitch` style: compact, rounded, clear on/off state, and aligned with the app accent tint. Do not represent binary enablement as segmented controls, buttons, or custom chips.
 
 ### Chips
 - **Style:** Compact text or icon plus text, with a subtle background tint only when showing state.
@@ -170,7 +170,7 @@ Depth is conveyed through solid surfaces, subtle borders, and small shadows. Avo
 - **One state, one place:** Do not repeat the same readiness, mode, or permission state in adjacent areas.
 - **Explain only when blocked:** Permission and configuration guidance should appear when an action is unavailable or likely to fail.
 - **Settings are controls first:** Avoid generic subtitles such as "choose a mode" when the control already explains itself.
-- **Selection consistency:** Settings selections use native segmented controls. Custom colored blocks are for status only, never for choosing one option.
+- **Selection consistency:** Settings selections use the project `DVIChoiceBar` style: one compact segmented surface, one unmistakable selected state, and no competing card-style selection patterns. Custom colored blocks are for status only, never for choosing one option.
 
 ### Inputs / Fields
 - **Style:** Quiet custom fields on elevated warm surfaces.

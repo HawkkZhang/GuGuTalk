@@ -4,7 +4,7 @@
 
 ### 2026-05-07 Codex 修复记录
 
-**状态：已做代码修复并通过 Release 编译，已安装到 `/Applications/GuGuTalk.app`，仍需用户在本机点击权限按钮做人工验证。**
+**状态：已做代码修复并通过 Release 编译，相关修复已进入当前打包流程。后续用户测试没有再确认同类权限阻塞；本文件保留为历史问题和回归测试记录。下方部分“需要修复”是当时的原始排查记录，不代表当前仍未修。**
 
 已处理：
 - 语音识别权限申请现在显式从主线程发起，并在主线程恢复结果，降低 `SFSpeechRecognizer.requestAuthorization` 回调导致崩溃的风险。
@@ -63,7 +63,7 @@ tccutil reset SpeechRecognition com.end.DesktopVoiceInput
 - `xcodebuild -configuration Release` 构建通过。
 - `/Applications/GuGuTalk.app` 的 entitlements 已确认包含 `com.apple.security.device.audio-input => true`。
 - 已启动 `/Applications/GuGuTalk.app/Contents/MacOS/DesktopVoiceInput`。
-- 仍需用户点击应用内麦克风授权并确认系统弹窗。
+- 后续用户测试基本恢复；仍建议在新机器或新 DMG 上回归麦克风授权流程。
 
 ### 1. 申请语音识别权限导致应用闪退
 **现象**：点击"语音识别"的"立即申请"按钮后，应用直接崩溃闪退

@@ -27,27 +27,27 @@ DesktopVoiceInput/
 
 ## 技术栈
 
-- **语言**：Swift 5.9+
+- **语言**：Swift 6
 - **框架**：SwiftUI, AppKit
 - **语音识别**：
   - Apple Speech Framework（本地）
   - WebSocket（豆包、千问）
 - **音频采集**：AVFoundation
-- **热键**：Carbon Events API
+- **热键**：CGEvent tap
 
 ## 构建项目
 
 ### 环境要求
 
-- Xcode 15.0+
-- macOS 13.0+ SDK
+- 支持 Swift 6 的 Xcode
+- macOS 14.0+ target / SDK
 
 ### 构建步骤
 
 ```bash
 # 克隆仓库
-git clone https://github.com/HawkkZhang/GuGuSpeak.git
-cd GuGuSpeak
+git clone https://github.com/HawkkZhang/GuGuTalk.git
+cd GuGuTalk
 
 # 用 Xcode 打开
 open DesktopVoiceInput.xcodeproj
@@ -56,6 +56,7 @@ open DesktopVoiceInput.xcodeproj
 xcodebuild -project DesktopVoiceInput.xcodeproj \
            -scheme DesktopVoiceInput \
            -configuration Debug \
+           -derivedDataPath /tmp/DesktopVoiceInputDerivedData \
            build
 ```
 
@@ -104,9 +105,9 @@ RecognitionOrchestrator.endCapture()
 
 #### TextInsertionService
 文本插入服务，支持多种方式：
-- CGEvent 模拟键盘输入
-- Accessibility API
 - Pasteboard 粘贴
+- Accessibility API
+- CGEvent 模拟键盘输入
 
 ## 添加新的识别引擎
 
@@ -165,7 +166,13 @@ category: LocalSpeech / Doubao / Qwen / Orchestrator
 
 ## 测试
 
-目前项目没有自动化测试，建议手动测试：
+当前已有基础单元测试，主要覆盖文本后处理、豆包结果解析和终帧前缀保护：
+
+```bash
+swift test
+```
+
+仍建议继续做以下手动测试：
 
 1. **本地识别**：说多个句子，检查是否累积正确
 2. **云端识别**：测试流式更新和最终结果
@@ -190,10 +197,10 @@ category: LocalSpeech / Doubao / Qwen / Orchestrator
 
 ## 路线图
 
-- [ ] 添加自动化测试
+- [ ] 扩展自动化测试
 - [ ] 改进本地识别（添加标点）
 - [ ] 支持更多识别引擎
-- [ ] 添加语音命令功能
+- [ ] 改进 provider 配置校验和错误提示
 - [ ] 优化性能和内存使用
 - [ ] 添加使用统计和分析
 

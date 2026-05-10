@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-04-29T00:00:00+08:00",
+  "generatedAt": "2026-05-10T00:00:00+08:00",
   "title": "Design System: Desktop Voice Input",
   "extensions": {
-    "northStar": "Quiet Mac Companion",
+    "northStar": "Aqua Chick Companion",
     "theme": {
       "default": "system",
       "manualOptions": ["light", "dark"],
@@ -16,7 +16,7 @@
       "principle": "State feedback only, no decorative choreography."
     },
     "rules": [
-      "Use native macOS controls before custom controls.",
+      "Use native macOS window behavior, system font, and Mac-like custom controls.",
       "Use color for state and action only.",
       "Keep cloud provider settings collapsed until needed.",
       "Use system font everywhere; reserve monospaced style for shortcuts and credentials."

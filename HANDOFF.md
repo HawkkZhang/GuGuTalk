@@ -342,9 +342,9 @@ This file is the first-stop handoff note for switching between Codex, Claude Cod
 
 ---
 
-## ⚠️ CRITICAL ISSUES - 2026-05-07
+## Historical Critical Issues - 2026-05-07
 
-**权限流程曾导致应用处于不可用状态。Codex 已做一轮修复并通过 Release 编译，已安装到 `/Applications/GuGuTalk.app`，仍需用户本机人工验证。**
+**权限流程曾导致应用处于不可用状态。相关修复已经进入当前代码和打包流程；后续用户测试没有再确认同类权限阻塞。这里保留为历史风险和回归测试背景。**
 
 1. **申请语音识别权限导致闪退**
    - 点击"语音识别"的"立即申请"按钮后应用崩溃
@@ -360,7 +360,7 @@ This file is the first-stop handoff note for switching between Codex, Claude Cod
    - 用户在系统设置中授予权限后，应用仍显示"未授权"
    - 已定位：麦克风权限缺失的真实原因是 Hardened Runtime 下应用缺少 `com.apple.security.device.audio-input` entitlement，导致系统麦克风权限列表不出现 GuGuTalk
    - 已处理：Release 构建使用本地稳定签名 `GuGuTalk Local Code Signing`；新增 `Config/DesktopVoiceInput.entitlements`；刷新检查统一走 AppModel，刷新权限后同步热键监听状态
-   - 需要验证修复是否有效
+   - 后续用户测试基本恢复；仍需作为权限回归场景持续验证
 
 **详细问题记录见 `BUGS.md`**
 
@@ -388,6 +388,7 @@ Current implemented state:
 - Terminal final has a narrow prefix-repair guard only for the observed edge case where Doubao terminal `result.text` drops a stable prefix from the previous update.
 - Occasional repeated-character reports still need log-based verification. Check `[DoubaoTranscript] raw`, `normalized`, and `emitted` before adding any new local correction.
 - The primary settings/onboarding entry now uses a dedicated AppKit `NSWindow`, not SwiftUI `Settings {}` or a bridge-based settings scene.
+- Documentation audit completed on 2026-05-10: README, DESIGN, CONTRIBUTING, BUGS, MEMORY, and HANDOFF have been aligned with the current implementation for macOS target, hotkeys, AppKit settings window, Doubao `result_type = "full"`, custom controls, local test coverage, and self-text-field insertion behavior.
 
 Desired app-entry behavior:
 
@@ -477,7 +478,7 @@ Latest local fix:
 - Do not assume hotkeys are fully stable. Dual hotkey mode still needs testing and polish.
 - If hold-to-talk is still cut off, inspect logs for `HotkeyManager` release events versus `RecognitionOrchestrator` timeout/provider events. A cutoff without release should now show whether it is provider failure, sendAudio failure, or a new lifecycle bug.
 - Do not let shortcut recording trigger live voice input.
-- Do not let recognized text insert into the app's own settings or internal UI.
+- Allow voice input inside GuGuTalk's own editable text fields, including prompts and provider configuration fields; block insertion only when the focused GuGuTalk element is not editable.
 - Treat text insertion compatibility as a top-priority product risk. Browser and web rich-text editors can expose placeholder / hint text through Accessibility APIs, so direct AX read-modify-write can accidentally merge hint text into the dictated result. Prefer paste-style insertion for browsers / web editors, keep Accessibility insertion for safe native controls, and build toward per-app strategy memory plus full pasteboard restoration.
 - Cloud provider credentials live in local user defaults and are not committed.
 - macOS permissions are per-machine and are not committed.
