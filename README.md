@@ -1,4 +1,4 @@
-# GuGuSpeak
+# GuGuTalk
 
 一款 macOS 原生语音输入工具，支持本地识别和云端识别，让语音输入更高效。
 
@@ -34,7 +34,7 @@
 
 ### 下载
 
-从 [Releases](https://github.com/HawkkZhang/GuGuSpeak/releases) 下载最新版本。
+从 [Releases](https://github.com/HawkkZhang/GuGuTalk/releases) 下载最新版本。
 
 ### 首次运行
 
@@ -134,7 +134,7 @@ dist/dmg/
 
 ## 🤝 反馈与贡献
 
-- 问题反馈：[GitHub Issues](https://github.com/HawkkZhang/GuGuSpeak/issues)
+- 问题反馈：[GitHub Issues](https://github.com/HawkkZhang/GuGuTalk/issues)
 - 功能建议：欢迎提交 Issue 或 Pull Request
 
 ## 📄 开源协议

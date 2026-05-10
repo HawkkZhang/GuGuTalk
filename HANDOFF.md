@@ -368,7 +368,7 @@ This file is the first-stop handoff note for switching between Codex, Claude Cod
 
 - Stable tag: `stable-2026-05-01`
 - Stable commit: `960f2b3`
-- GitHub repository: `https://github.com/HawkkZhang/GuGuSpeak`
+- GitHub repository: `https://github.com/HawkkZhang/GuGuTalk`
 - Latest pushed checkpoint on `main`: `64107b2 修复识别收尾和 AI 后处理气泡`
 - Local branch at time of writing: `main`
 - Remote branch: `origin/main`
@@ -508,7 +508,7 @@ Use this when opening Claude Code or another coding agent:
 
 ```text
 Please first read PRODUCT.md, DESIGN.md, MEMORY.md, HANDOFF.md, README.md, and the latest git log.
-This is a macOS SwiftUI/AppKit voice input app named GuGuSpeak / DesktopVoiceInput.
+This is a macOS SwiftUI/AppKit voice input app named GuGuTalk / DesktopVoiceInput.
 Continue from main at or after commit 64107b2.
 Start by replacing the current SwiftUI Settings scene entry flow with a dedicated native settings/onboarding window for GuGuTalk.
 Route Finder/Launchpad app open, app reopen, menu bar Settings, and permission guidance into the same window.

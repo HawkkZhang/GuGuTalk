@@ -54,9 +54,9 @@
 - Local Apple Speech, Qwen realtime, and Doubao realtime integrations have all been implemented.
 - The current stable checkpoint is tag `stable-2026-05-01`, commit `960f2b3`.
 - The latest pushed checkpoint on `main` is `5521384 记录豆包流式修复和启动入口方案`.
-- GitHub repository: `https://github.com/HawkkZhang/GuGuSpeak`.
+- GitHub repository: `https://github.com/HawkkZhang/GuGuTalk`.
 - Local development branch is currently `main`, tracking `origin/main`.
-- Product name in the installed app is currently `GuGuTalk`; repository/project names still include `GuGuSpeak` / `DesktopVoiceInput`.
+- Product name and GitHub repository are currently `GuGuTalk`; Xcode project and internal target names still include `DesktopVoiceInput`.
 - Current UI direction is `Aqua Chick Companion`: theme colors are derived from the app icon, with icon-aqua as the main action/selection color and icon-orange only as a small warmth accent. The UI should use custom refined controls, system font, compact Mac utility structure, no gray glassmorphism, no neon/cyber styling.
 - Dark mode should use aqua as a restrained accent, not a large luminous wash. Settings surfaces should stay low-saturation charcoal-teal, with selected controls clearly visible but not bright cyan.
 - Recording overlay normal states should use one consistent icon-aqua theme surface between the initial waveform state and the live transcript state; avoid hidden square backgrounds, heavy shadows, and glass-like frames around the rounded shape.

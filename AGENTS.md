@@ -60,7 +60,7 @@ Do not put DMGs in the repo root, `Packages/`, Desktop, Downloads, or ad-hoc tem
 
 - Current stable checkpoint: `stable-2026-05-01`
 - Stable commit: `960f2b3`
-- Remote repository: `https://github.com/HawkkZhang/GuGuSpeak`
+- Remote repository: `https://github.com/HawkkZhang/GuGuTalk`
 - Current local branch may be `codex/archive-current-state` while tracking `origin/main`.
 
 Before editing:
