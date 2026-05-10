@@ -2,6 +2,10 @@
 .agents/
 /.build
 /Packages
+/dist/dmg/*.dmg
+/dist/dmg/*.sha256
+/dist/dmg/*.app
+/dist/staging/
 xcuserdata/
 DerivedData/
 .swiftpm/configuration/registries.json

@@ -346,6 +346,14 @@ Read these before starting work:
 
 When switching tools, update `HANDOFF.md` if the next step, risk, or known-good state changes.
 
+## Artifact Management
+
+- Canonical local DMG output directory: `dist/dmg/`.
+- Packaging command: `./scripts/package-dmg.sh`.
+- The script builds Release, stages `GuGuTalk.app`, creates a compressed DMG, verifies it, and writes a `.sha256` checksum next to it.
+- Do not create DMGs in the repo root, `Packages/`, Desktop, Downloads, or arbitrary temp folders.
+- `dist/dmg/*.dmg` and `dist/dmg/*.sha256` are local artifacts and must not be committed.
+
 ## Recent State
 
 The app currently has:
@@ -433,6 +441,12 @@ Build:
 
 ```bash
 xcodebuild -project DesktopVoiceInput.xcodeproj -scheme DesktopVoiceInput -configuration Debug -derivedDataPath /tmp/DesktopVoiceInputDerivedData build
+```
+
+Package local DMG:
+
+```bash
+./scripts/package-dmg.sh
 ```
 
 Run the debug app:

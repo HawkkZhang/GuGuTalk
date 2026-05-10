@@ -65,6 +65,7 @@
 - Recognition is single-session only, but async cleanup must be session-scoped: final-result timeout tasks, pending stops, and finish requests must not leak across sessions or terminate a later hold-to-talk recording.
 - GuGuTalk must be usable inside its own text fields, including prompt and provider configuration fields. Shortcut recording should suspend global hotkeys only while recording a shortcut; do not block all insertion just because the foreground app is GuGuTalk.
 - Doubao diagnostics intentionally log raw provider transcript text and normalized transcript text in Release builds for terminal/final-relevant events while this issue is being verified. Remove or gate these transcript-content logs before a privacy-sensitive public release.
+- Local DMG artifacts must be generated with `./scripts/package-dmg.sh` and stored only in `dist/dmg/`. Do not create new DMGs in the repo root, `Packages/`, Desktop, Downloads, or random temporary folders.
 
 ## Latest Synced State - 2026-05-08
 

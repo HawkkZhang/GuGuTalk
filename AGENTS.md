@@ -40,6 +40,22 @@ open /tmp/DesktopVoiceInputDerivedData/Build/Products/Debug/DesktopVoiceInput.ap
 
 If another `DesktopVoiceInput` process is already running, stop it before opening the newly built app.
 
+## Packaging And Artifacts
+
+All generated DMG files must be stored in one canonical local artifact directory:
+
+```bash
+dist/dmg/
+```
+
+Use the packaging script instead of creating DMGs by hand:
+
+```bash
+./scripts/package-dmg.sh
+```
+
+Do not put DMGs in the repo root, `Packages/`, Desktop, Downloads, or ad-hoc temporary folders. `dist/dmg/*.dmg` and matching checksum files are local artifacts and must not be committed.
+
 ## Git Workflow
 
 - Current stable checkpoint: `stable-2026-05-01`
