@@ -4,6 +4,91 @@ This file is the first-stop handoff note for switching between Codex, Claude Cod
 
 ## Recent Fixes - 2026-05-10
 
+### 深色模式设置页降亮度与可读性调整（本地已实现，待用户体验确认）
+
+**用户反馈：**
+- 当前 UI 在深色模式下略显刺眼，尤其是设置界面。
+- 主要问题是文字不够清楚，大面积青色在暗色模式下有些顶眼。
+
+**本轮调整：**
+- 使用 `frontend-design` 方向做了暗色模式专项微调，不重做页面结构。
+- `DVITheme` 的暗色 aqua 从亮青白压到更深的水青，选中态仍明显，但不再像发光色块。
+- 暗色面板、侧栏、控件、分隔线整体降低饱和度，从大面积青色改为低饱和 charcoal-teal。
+- 设置页背景的青色氛围层透明度降低，减少整页被青色罩住的感觉。
+- `DESIGN.md` 增加 `Dark Aqua Rule`，要求暗色模式里 aqua 只做强调，不做大面积环境光。
+
+**验证：**
+- `swift test` passed：19 tests。
+- Debug `xcodebuild` passed。
+- Release `xcodebuild` passed。
+- Latest Release app launched from `/tmp/DesktopVoiceInputReleaseDerivedData/Build/Products/Release/DesktopVoiceInput.app`，PID `43633`。
+
+### 豆包 terminal final 偶发丢开头前缀（本地已实现，待用户实测确认）
+
+**用户反馈：**
+- 说长句时，开头内容一开始在流式气泡里出现过，但最终上屏时消失。
+- 真实例子：用户开头说了 “Gemini”，partial 里已经出现 `Gemini`，但 final 只剩 `之前还挺好用的。`。
+
+**本轮实锤：**
+1. 查看 `~/Library/Logs/GuGuTalk/doubao-transcripts.log` 后确认，不是插入服务或后处理删掉了开头。
+2. 同一次会话中，第 3 帧为 `previous="Gemini." raw="Gemini 之前还"`，第 4 帧 terminal raw 直接变成 `raw="之前还挺好用的。"`。
+3. 这说明豆包 terminal `result.text` 偶发把上一帧已经稳定出现的前缀丢掉。客户端原先严格信任 terminal `result.text`，所以把缺前缀的文本当 final 上屏。
+
+**本轮修复：**
+- 保持官方语义：豆包仍使用 `result_type = "full"`，常规 partial/final 仍直接以服务端 `result.text` 替换，不做 partial 拼接。
+- 新增 `DoubaoTranscriptRepair.recoverFinalText(current:previous:)`，只在 `terminal && finishRequested` 时生效。
+- 修复条件很保守：
+  - 当前 terminal final 不是上一帧的完整前缀延续；
+  - 上一帧尾部和当前 final 开头有至少 2 个语义字符的精确重叠；
+  - 被补回的前缀至少有 1 个语义字符；
+  - 否则完全不改服务端 final。
+- 诊断日志现在增加 `emitted` 和 `repairedFromPrevious` 字段。再次复现时可以直接看应用最终实际发出的文本是否经过修复。
+
+**验证：**
+- `swift test` passed：19 tests。
+- Debug `xcodebuild` passed。
+- Release `xcodebuild` passed。
+- Latest Release app launched from `/tmp/DesktopVoiceInputReleaseDerivedData/Build/Products/Release/DesktopVoiceInput.app`，PID `36210`。
+
+### 豆包偶发重字与音频结束包顺序（本地已实现，待用户实测确认）
+
+**用户反馈：**
+- 豆包仍偶发重字，例如“那我现在用用的就是 XUDP”，用户确认自己没有说两个“用”。
+
+**本轮定位：**
+1. 当前豆包解析逻辑并不是把 partial 拼接起来；`result_type = "full"` 时，每次会直接用服务端 `result.text` 替换 `latestTranscript`。
+2. 本机设置确认 `postProcessingEnabled = 0` 且识别模式是豆包，所以这类重字不是 AI 后处理改出来的。
+3. 近期日志里多次出现豆包协议错误：`last packet has been received already`。这更像是音频包和结束包并发发送导致最后一包先到，随后还有旧音频包抵达，服务端没有稳定返回 final；应用再用不稳定 partial 兜底上屏，就可能带出 partial 阶段的重复字。
+
+**本轮修复：**
+- `RealtimeWebSocketTransport` 新增异步发送锁，所有 WebSocket `send(text:)` / `send(data:)` 串行执行，确保音频帧和 finish 帧按调用顺序到达服务端。
+- 豆包每一帧识别结果都会输出 `[DoubaoTranscript]` 诊断：`previous`、`raw`、`normalized`、`resultTexts`、`utterances`、`lostPreviousPrefix`。
+- 同一份诊断也会写入 `~/Library/Logs/GuGuTalk/doubao-transcripts.log`。如果出现“Gemini 一开始有、后面没了”，查 `lostPreviousPrefix=true` 附近的几行即可判断是豆包 raw 已经删掉，还是客户端处理/上屏删掉。
+
+**验证：**
+- `swift test` passed：16 tests。
+- Debug `xcodebuild` passed。
+- Release `xcodebuild` passed。
+- Latest Release app launched from `/tmp/DesktopVoiceInputReleaseDerivedData/Build/Products/Release/DesktopVoiceInput.app`，PID `32371`。
+- Current local Doubao transcript log was truncated before user retest: `~/Library/Logs/GuGuTalk/doubao-transcripts.log`。
+
+### 快速重启录音时主动结束上一段会话（本地已实现，待用户实测确认）
+
+**用户反馈：**
+- 快速重新长按或再次触发语音输入时，如果上一段识别/后处理还没有自动结束，新会话可能无法正常开始录音。
+
+**本轮修复：**
+- `VoiceInputAppModel` 不再简单忽略“已有会话时的新触发”；如果用户再次手动触发录音，会先走 restart 流程，取消上一段未完成工作，再启动新的 hold-to-talk 或 toggle-to-talk 会话。
+- `RecognitionOrchestrator` 新增 `hasActiveWork` 和 `cancelActiveWorkForRestart(reason:)`，统一清理启动中 provider、活跃 provider、音频采集、final timeout、dismiss task、AI 后处理 task、provider event task。
+- provider 启动、音频发送、provider 事件、AI 后处理结果都绑定 `sessionGeneration`；旧会话晚到的事件或结果会被忽略，不再覆盖/结束新会话。
+- 正在握手但还没变成 `activeProvider` 的 provider 也会被记录为 `startingProvider`，快速重启时可以一起取消，避免旧连接晚回调干扰新录音。
+
+**验证：**
+- `swift test` passed：16 tests。
+- Debug `xcodebuild` passed。
+- Release `xcodebuild` passed。
+- Latest Release app launched from `/tmp/DesktopVoiceInputReleaseDerivedData/Build/Products/Release/DesktopVoiceInput.app`，PID `27079`。
+
 ### 长按说话提前中断与 GuGuTalk 内输入限制（本地已实现，待用户实测确认）
 
 **用户反馈：**

@@ -6,30 +6,30 @@ enum DVITheme {
     static let controlRadius: CGFloat = 12
     static let overlayRadius: CGFloat = 23
 
-    static let accent = color(light: (0.16, 0.72, 0.78), dark: (0.45, 0.88, 0.92))
-    static let accentStrong = color(light: (0.04, 0.47, 0.53), dark: (0.68, 0.96, 0.98))
-    static let accentSoft = color(light: (0.83, 0.97, 0.98), dark: (0.08, 0.23, 0.26))
-    static let brandWarm = color(light: (0.95, 0.55, 0.22), dark: (1.00, 0.70, 0.36))
-    static let ready = color(light: (0.08, 0.61, 0.44), dark: (0.48, 0.92, 0.70))
-    static let caution = color(light: (0.82, 0.43, 0.10), dark: (1.00, 0.69, 0.36))
-    static let danger = color(light: (0.84, 0.18, 0.18), dark: (1.00, 0.45, 0.42))
-    static let selectedInk = color(light: (0.98, 0.99, 1.00), dark: (0.98, 0.99, 1.00))
+    static let accent = color(light: (0.16, 0.72, 0.78), dark: (0.20, 0.60, 0.64))
+    static let accentStrong = color(light: (0.04, 0.47, 0.53), dark: (0.08, 0.44, 0.49))
+    static let accentSoft = color(light: (0.83, 0.97, 0.98), dark: (0.06, 0.16, 0.18))
+    static let brandWarm = color(light: (0.95, 0.55, 0.22), dark: (0.86, 0.53, 0.25))
+    static let ready = color(light: (0.08, 0.61, 0.44), dark: (0.34, 0.76, 0.56))
+    static let caution = color(light: (0.82, 0.43, 0.10), dark: (0.90, 0.56, 0.24))
+    static let danger = color(light: (0.84, 0.18, 0.18), dark: (0.92, 0.36, 0.34))
+    static let selectedInk = color(light: (0.98, 0.99, 1.00), dark: (0.95, 0.99, 0.99))
 
-    static let ink = color(light: (0.08, 0.13, 0.15), dark: (0.94, 0.97, 0.97))
-    static let secondaryInk = color(light: (0.31, 0.42, 0.43), dark: (0.70, 0.79, 0.80))
-    static let tertiaryInk = color(light: (0.52, 0.63, 0.64), dark: (0.54, 0.66, 0.67))
+    static let ink = color(light: (0.08, 0.13, 0.15), dark: (0.90, 0.94, 0.94))
+    static let secondaryInk = color(light: (0.31, 0.42, 0.43), dark: (0.67, 0.77, 0.77))
+    static let tertiaryInk = color(light: (0.52, 0.63, 0.64), dark: (0.52, 0.63, 0.64))
 
-    static let window = color(light: (0.94, 0.98, 0.98), dark: (0.06, 0.10, 0.11))
-    static let sidebar = color(light: (0.88, 0.97, 0.98), dark: (0.07, 0.17, 0.19))
-    static let panel = color(light: (1.00, 0.99, 0.96), dark: (0.12, 0.19, 0.20))
-    static let elevatedPanel = color(light: (0.95, 0.99, 0.99), dark: (0.16, 0.25, 0.27))
-    static let control = color(light: (0.87, 0.95, 0.96), dark: (0.18, 0.30, 0.32))
-    static let controlElevated = color(light: (0.99, 1.00, 0.98), dark: (0.20, 0.31, 0.33))
-    static let separator = color(light: (0.63, 0.78, 0.80), dark: (0.33, 0.50, 0.53))
-    static let overlaySurface = color(light: (1.00, 0.99, 0.94), dark: (0.10, 0.24, 0.26))
-    static let overlayActive = color(light: (0.14, 0.70, 0.76), dark: (0.15, 0.58, 0.63))
-    static let overlayInk = color(light: (0.07, 0.16, 0.18), dark: (0.96, 0.99, 0.99))
-    static let overlayMutedInk = color(light: (0.36, 0.49, 0.51), dark: (0.70, 0.86, 0.88))
+    static let window = color(light: (0.94, 0.98, 0.98), dark: (0.055, 0.075, 0.08))
+    static let sidebar = color(light: (0.88, 0.97, 0.98), dark: (0.065, 0.115, 0.125))
+    static let panel = color(light: (1.00, 0.99, 0.96), dark: (0.105, 0.145, 0.15))
+    static let elevatedPanel = color(light: (0.95, 0.99, 0.99), dark: (0.13, 0.18, 0.185))
+    static let control = color(light: (0.87, 0.95, 0.96), dark: (0.14, 0.20, 0.205))
+    static let controlElevated = color(light: (0.99, 1.00, 0.98), dark: (0.16, 0.225, 0.23))
+    static let separator = color(light: (0.63, 0.78, 0.80), dark: (0.25, 0.36, 0.37))
+    static let overlaySurface = color(light: (1.00, 0.99, 0.94), dark: (0.08, 0.18, 0.20))
+    static let overlayActive = color(light: (0.14, 0.70, 0.76), dark: (0.10, 0.45, 0.50))
+    static let overlayInk = color(light: (0.07, 0.16, 0.18), dark: (0.93, 0.98, 0.98))
+    static let overlayMutedInk = color(light: (0.36, 0.49, 0.51), dark: (0.68, 0.81, 0.82))
     static let overlayShadow = color(light: (0.04, 0.26, 0.30), dark: (0.00, 0.00, 0.00))
 
     static func stateFill(_ color: Color, emphasized: Bool = false) -> Color {
@@ -102,7 +102,7 @@ struct DVIChoiceBar<Option: Hashable>: View {
                                             endPoint: .bottomTrailing
                                         )
                                     )
-                                    .shadow(color: DVITheme.accent.opacity(0.20), radius: 7, x: 0, y: 3)
+                                    .shadow(color: DVITheme.accent.opacity(0.12), radius: 6, x: 0, y: 2)
                             }
                         }
                 }

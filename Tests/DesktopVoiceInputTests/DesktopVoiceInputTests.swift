@@ -117,4 +117,34 @@ final class DesktopVoiceInputTests: XCTestCase {
 
         XCTAssertEqual(payload?.canonicalText, "整个应用的颜色")
     }
+
+    func testDoubaoFinalRepairKeepsDroppedStablePrefix() {
+        let repaired = DoubaoTranscriptRepair.recoverFinalText(
+            current: "之前还挺好用的。",
+            previous: "Gemini 之前还"
+        )
+
+        XCTAssertTrue(repaired.didRecover)
+        XCTAssertEqual(repaired.text, "Gemini 之前还挺好用的。")
+    }
+
+    func testDoubaoFinalRepairDoesNotChangeNormalFullFinal() {
+        let repaired = DoubaoTranscriptRepair.recoverFinalText(
+            current: "Gemini 之前还挺好用的。",
+            previous: "Gemini 之前还"
+        )
+
+        XCTAssertFalse(repaired.didRecover)
+        XCTAssertEqual(repaired.text, "Gemini 之前还挺好用的。")
+    }
+
+    func testDoubaoFinalRepairRequiresMeaningfulOverlap() {
+        let repaired = DoubaoTranscriptRepair.recoverFinalText(
+            current: "还挺好用的。",
+            previous: "Gemini 之前还"
+        )
+
+        XCTAssertFalse(repaired.didRecover)
+        XCTAssertEqual(repaired.text, "还挺好用的。")
+    }
 }

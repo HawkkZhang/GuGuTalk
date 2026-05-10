@@ -14,8 +14,8 @@ colors:
   border-subtle: "#A0C7CC"
   surface-paper: "#F1FAFA"
   surface-panel: "#FFFCF5"
-  surface-dark: "#0F1A1C"
-  surface-panel-dark: "#1F3033"
+  surface-dark: "#0E1314"
+  surface-panel-dark: "#1A2526"
 typography:
   title:
     fontFamily: "system-ui"
@@ -78,6 +78,11 @@ The palette is extracted from the app icon: aqua background, soft white body, an
 - **Aqua Soft** (#D4F7FA): Quiet selected backgrounds, provider-ready surfaces, and subtle atmosphere.
 - **Icon Orange** (#F28C38): Tiny brand warmth only, never large decorative fills.
 
+### Dark Mode Adjustment
+- **Dark Aqua Active** should be deeper and less luminous than light-mode aqua. Use it for selected controls without making the surface glow.
+- **Dark Aqua Soft** should be a muted atmospheric tint, not a large cyan wash. Settings backgrounds should stay mostly near-neutral.
+- **Dark panels** should lean charcoal-teal with low saturation so primary and secondary text remain readable.
+
 ### Secondary
 - **Ready Green** (#008F63): Ready, success, recording health, and usable permission state.
 - **Signal Amber** (#C27514): Caution, attention, and configuration warnings.
@@ -99,6 +104,8 @@ The palette is extracted from the app icon: aqua background, soft white body, an
 **The State Color Rule.** Aqua, green, amber, and red are for state and action. Icon orange is allowed only as a very small brand note.
 
 **The Selection Rule.** Selected custom controls should use a solid aqua fill and white text. Inactive controls stay on soft aqua or warm-white surfaces.
+
+**The Dark Aqua Rule.** In dark mode, aqua is an accent, not ambient lighting. Large surfaces should use low-saturation dark neutrals; cyan should be reserved for selected states, focused controls, and small status marks.
 
 ## 3. Typography
 

@@ -54,9 +54,9 @@ struct SettingsView: View {
             DVITheme.window
             LinearGradient(
                 colors: [
-                    DVITheme.accentSoft.opacity(0.56),
+                    DVITheme.accentSoft.opacity(0.36),
                     Color.clear,
-                    DVITheme.brandWarm.opacity(0.08)
+                    DVITheme.brandWarm.opacity(0.05)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing

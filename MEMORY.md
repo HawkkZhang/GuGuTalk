@@ -58,13 +58,17 @@
 - Local development branch is currently `main`, tracking `origin/main`.
 - Product name in the installed app is currently `GuGuTalk`; repository/project names still include `GuGuSpeak` / `DesktopVoiceInput`.
 - Current UI direction is `Aqua Chick Companion`: theme colors are derived from the app icon, with icon-aqua as the main action/selection color and icon-orange only as a small warmth accent. The UI should use custom refined controls, system font, compact Mac utility structure, no gray glassmorphism, no neon/cyber styling.
+- Dark mode should use aqua as a restrained accent, not a large luminous wash. Settings surfaces should stay low-saturation charcoal-teal, with selected controls clearly visible but not bright cyan.
 - Recording overlay normal states should use one consistent icon-aqua theme surface between the initial waveform state and the live transcript state; avoid hidden square backgrounds, heavy shadows, and glass-like frames around the rounded shape.
 - Chinese speech text should remove pause-induced spaces between Han characters and around Chinese punctuation while preserving normal English word spaces. This applies to Doubao partial/final text and final insertion post-processing.
 - The punctuation mode labeled `去掉句尾句号` must only remove terminal period marks (`。`, `.`, `．`, `｡`). It must not remove question marks or exclamation marks returned by providers.
 - Capture endpointing should be user-controlled. Hold-to-talk and toggle-to-talk sessions should end on the user's release/stop action, not on provider VAD silence detection.
 - Recognition is single-session only, but async cleanup must be session-scoped: final-result timeout tasks, pending stops, and finish requests must not leak across sessions or terminate a later hold-to-talk recording.
+- If the user manually triggers a new recording while previous recognition work is still active, the app should cancel the previous session/work first and then start the new session. This includes startup handshakes, active providers, audio capture, final timeout, stale provider events, and AI post-processing.
 - GuGuTalk must be usable inside its own text fields, including prompt and provider configuration fields. Shortcut recording should suspend global hotkeys only while recording a shortcut; do not block all insertion just because the foreground app is GuGuTalk.
-- Doubao diagnostics intentionally log raw provider transcript text and normalized transcript text in Release builds for terminal/final-relevant events while this issue is being verified. Remove or gate these transcript-content logs before a privacy-sensitive public release.
+- Doubao diagnostics intentionally log raw provider transcript text and normalized transcript text in Release builds while this issue is being verified. Each update is printed as `[DoubaoTranscript]` and also appended to `~/Library/Logs/GuGuTalk/doubao-transcripts.log`. Remove or gate these transcript-content logs before a privacy-sensitive public release.
+- Doubao WebSocket sends must stay serialized. Audio tap chunks are produced from multiple async tasks, so the transport must prevent a finish frame from overtaking earlier audio frames; otherwise Doubao can report `last packet has been received already` and the app may fall back to unstable partial text.
+- Doubao `bigmodel_async` with `result_type = "full"` should normally be treated as provider-owned full replacement text. However, real logs showed terminal final can occasionally drop a stable prefix that existed in the immediately previous partial/full update, such as previous `Gemini 之前还` followed by terminal raw `之前还挺好用的。`. The client now protects only this terminal-finish edge case with overlap-based prefix repair and logs `repairedFromPrevious` plus `emitted`.
 - Local DMG artifacts must be generated with `./scripts/package-dmg.sh` and stored only in `dist/dmg/`. Do not create new DMGs in the repo root, `Packages/`, Desktop, Downloads, or random temporary folders.
 
 ## Latest Synced State - 2026-05-08
@@ -82,6 +86,24 @@ These changes have been pushed to GitHub on `main` at commit `5521384`:
   - permissions ready -> open General/Home page
 
 ## Latest Local Fixes - 2026-05-10
+
+### Doubao repeated-word investigation and send ordering
+
+- Current Doubao transcript handling uses `result_type = "full"` and replaces the preview/final candidate with provider `result.text`; it does not concatenate partial results.
+- User's local settings showed `postProcessingEnabled = 0`, so repeated words such as “用用” are not caused by LLM post-processing.
+- Recent logs showed Doubao protocol errors like `last packet has been received already`, consistent with a finish frame overtaking queued audio frames.
+- `RealtimeWebSocketTransport` now serializes all outgoing WebSocket sends with an async lock so audio frames and finish frames preserve send order.
+- Doubao transcript snapshots now log every update, not just terminal/finish. The diagnostic includes `previous`, `raw`, `normalized`, `resultTexts`, `utterances`, and `lostPreviousPrefix`; it is mirrored to Xcode console and `~/Library/Logs/GuGuTalk/doubao-transcripts.log`.
+- Real logs confirmed a separate terminal-final issue: a partial update contained `Gemini 之前还`, but the terminal raw result became `之前还挺好用的。`, causing the final inserted text to lose the opening `Gemini`. `DoubaoTranscriptRepair` now only repairs terminal final text when the previous update and terminal text share a meaningful suffix/prefix overlap; logs include `repairedFromPrevious` and `emitted` to prove what was actually sent to the app.
+- This is specifically to verify reports where an early term such as “Gemini” appears in partial preview but disappears from later/final output.
+- Verified locally: `swift test` passed 19 tests, Debug `xcodebuild` passed, Release `xcodebuild` passed, and latest Release app launched from `/tmp/DesktopVoiceInputReleaseDerivedData/Build/Products/Release/DesktopVoiceInput.app` with PID `36210`.
+
+### Manual restart cancels previous recognition work
+
+- Quick user restarts are now intentional: a new hold-to-talk or toggle-to-talk trigger cancels any unfinished previous recognition work before starting the new session.
+- `RecognitionOrchestrator` tracks both `startingProvider` and `activeProvider`, so a provider that is still handshaking can be canceled during a restart.
+- Provider events, audio sends, final-result timeouts, and AI post-processing are scoped to `sessionGeneration`, so stale async results from an older session cannot update or end a newer recording.
+- Verified locally: `swift test` passed 16 tests, Debug `xcodebuild` passed, Release `xcodebuild` passed, and latest Release app launched from `/tmp/DesktopVoiceInputReleaseDerivedData/Build/Products/Release/DesktopVoiceInput.app` with PID `27079`.
 
 ### Hold-to-talk recording cut off by stale final timeout
 

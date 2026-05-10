@@ -8,6 +8,7 @@ enum RealtimeWebSocketIncomingMessage {
 final class RealtimeWebSocketTransport: @unchecked Sendable {
     private let session: URLSession
     private let task: URLSessionWebSocketTask
+    private let sendLock = AsyncSendLock()
     private var receiveTask: Task<Void, Never>?
     private let onMessage: @Sendable (RealtimeWebSocketIncomingMessage) -> Void
     private let onDisconnected: @Sendable (Error?) -> Void
@@ -52,11 +53,22 @@ final class RealtimeWebSocketTransport: @unchecked Sendable {
     }
 
     func send(text: String) async throws {
-        try await task.send(.string(text))
+        try await send(.string(text))
     }
 
     func send(data: Data) async throws {
-        try await task.send(.data(data))
+        try await send(.data(data))
+    }
+
+    private func send(_ message: URLSessionWebSocketTask.Message) async throws {
+        await sendLock.lock()
+        do {
+            try await task.send(message)
+            await sendLock.unlock()
+        } catch {
+            await sendLock.unlock()
+            throw error
+        }
     }
 
     func close() {
@@ -64,5 +76,31 @@ final class RealtimeWebSocketTransport: @unchecked Sendable {
         task.cancel(with: .normalClosure, reason: nil)
         session.invalidateAndCancel()
         onDisconnected(nil)
+    }
+}
+
+private actor AsyncSendLock {
+    private var isLocked = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func lock() async {
+        if !isLocked {
+            isLocked = true
+            return
+        }
+
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func unlock() {
+        guard !waiters.isEmpty else {
+            isLocked = false
+            return
+        }
+
+        let next = waiters.removeFirst()
+        next.resume()
     }
 }

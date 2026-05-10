@@ -10,6 +10,17 @@ final class RecognitionOrchestrator: ObservableObject {
     @Published private(set) var lastErrorMessage: String?
     @Published private(set) var isSessionRunning = false
 
+    var hasActiveWork: Bool {
+        isStartingSession ||
+            isSessionActive ||
+            isSessionRunning ||
+            isFinishRequested ||
+            startingProvider != nil ||
+            activeProvider != nil ||
+            previewState.isPostProcessing ||
+            postProcessingTask != nil
+    }
+
     private let settings: AppSettings
     private let permissionCoordinator: PermissionCoordinator
     private let previewState: PreviewState
@@ -20,8 +31,10 @@ final class RecognitionOrchestrator: ObservableObject {
     private let textInsertionService: TextInsertionService
 
     private var activeProvider: SpeechProvider?
+    private var startingProvider: SpeechProvider?
     private var consumeEventsTask: Task<Void, Never>?
     private var dismissTask: Task<Void, Never>?
+    private var postProcessingTask: Task<Void, Never>?
     private var finalTranscript: String = ""
     private var isPendingStop = false
     private var isStartingSession = false
@@ -96,7 +109,13 @@ final class RecognitionOrchestrator: ObservableObject {
         Self.logger.info("Starting capture. generation=\(generation, privacy: .public) mode=\(config.mode.title, privacy: .public) sampleRate=\(config.sampleRate, privacy: .public)")
 
         do {
-            let selection = try await startProviderChain(selections, config: config)
+            let selection = try await startProviderChain(selections, config: config, generation: generation)
+            guard sessionGeneration == generation else {
+                Self.logger.info("Ignoring provider start because capture generation was superseded. generation=\(generation, privacy: .public) currentGeneration=\(self.sessionGeneration, privacy: .public)")
+                await selection.provider.cancel()
+                return
+            }
+
             previewState.activeMode = selection.mode
             previewState.message = "按住说话，松开后会插入最终文本"
             isSessionActive = true
@@ -106,9 +125,14 @@ final class RecognitionOrchestrator: ObservableObject {
 
             try audioCaptureEngine.startCapture { [weak self] chunk in
                 guard let self else { return }
-                await MainActor.run {
+                let shouldSend = await MainActor.run {
+                    guard self.sessionGeneration == generation, self.isSessionActive, !self.isFinishRequested else {
+                        return false
+                    }
                     self.previewState.audioLevel = chunk.audioLevel
+                    return true
                 }
+                guard shouldSend else { return }
 
                 do {
                     try await selection.provider.sendAudio(chunk)
@@ -126,6 +150,10 @@ final class RecognitionOrchestrator: ObservableObject {
                 await endCapture()
             }
         } catch {
+            if error is SupersededSessionError {
+                Self.logger.info("beginCapture stopped because a newer capture superseded this one")
+                return
+            }
             Self.logger.error("beginCapture failed: \(error.localizedDescription, privacy: .public)")
             isStartingSession = false
             fail(message: error.localizedDescription)
@@ -213,14 +241,69 @@ final class RecognitionOrchestrator: ObservableObject {
         }
     }
 
-    private func startProviderChain(_ selections: [ProviderSelection], config: RecognitionConfig) async throws -> ProviderSelection {
+    func cancelActiveWorkForRestart(reason: String) async {
+        guard hasActiveWork else {
+            Self.logger.info("Restart cleanup skipped because there is no active recognition work. reason=\(reason, privacy: .public)")
+            dismissTask?.cancel()
+            dismissTask = nil
+            previewState.resetToIdle()
+            return
+        }
+
+        Self.logger.warning("Cancelling active recognition work for user restart. reason=\(reason, privacy: .public)")
+        sessionGeneration += 1
+        sessionTimeoutTask?.cancel()
+        sessionTimeoutTask = nil
+        dismissTask?.cancel()
+        dismissTask = nil
+        postProcessingTask?.cancel()
+        postProcessingTask = nil
+        consumeEventsTask?.cancel()
+        consumeEventsTask = nil
+
+        let provider = activeProvider
+        let providerStartingUp = startingProvider
+        activeProvider = nil
+        startingProvider = nil
+        stopAudioCapture(reason: "user restart: \(reason)")
+
+        finalTranscript = ""
+        isStartingSession = false
+        isPendingStop = false
+        isFinishRequested = false
+        isSessionActive = false
+        isSessionRunning = false
+        previewState.resetToIdle()
+
+        await provider?.cancel()
+        if let providerStartingUp {
+            if let provider, providerStartingUp === provider {
+                return
+            }
+            await providerStartingUp.cancel()
+        }
+    }
+
+    private func startProviderChain(_ selections: [ProviderSelection], config: RecognitionConfig, generation: Int) async throws -> ProviderSelection {
         var previousMode: RecognitionMode?
         var lastFailure: Error?
 
         for selection in selections {
+            guard sessionGeneration == generation else {
+                throw SupersededSessionError()
+            }
+
             do {
-                subscribe(to: selection.provider.events)
+                subscribe(to: selection.provider.events, generation: generation)
+                startingProvider = selection.provider
                 try await selection.provider.startSession(config: config)
+                if startingProvider === selection.provider {
+                    startingProvider = nil
+                }
+                guard sessionGeneration == generation else {
+                    await selection.provider.cancel()
+                    throw SupersededSessionError()
+                }
 
                 if let previousMode {
                     previewState.message = "已自动切换到 \(selection.mode.title)：本地引擎不可用"
@@ -232,6 +315,16 @@ final class RecognitionOrchestrator: ObservableObject {
                 activeProvider = selection.provider
                 return selection
             } catch {
+                if startingProvider === selection.provider {
+                    startingProvider = nil
+                }
+                if error is SupersededSessionError {
+                    throw error
+                }
+                guard sessionGeneration == generation else {
+                    await selection.provider.cancel()
+                    throw SupersededSessionError()
+                }
                 Self.logger.error("Provider start failed. mode=\(selection.mode.title, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
                 previousMode = selection.mode
                 lastFailure = error
@@ -241,12 +334,17 @@ final class RecognitionOrchestrator: ObservableObject {
         throw lastFailure ?? SessionFailureInfo(message: "所有识别引擎都不可用。")
     }
 
-    private func subscribe(to stream: AsyncStream<TranscriptEvent>) {
+    private func subscribe(to stream: AsyncStream<TranscriptEvent>, generation: Int) {
         consumeEventsTask?.cancel()
         consumeEventsTask = Task { [weak self] in
             for await event in stream {
                 await MainActor.run {
-                    self?.handleEvent(event)
+                    guard let self else { return }
+                    guard self.sessionGeneration == generation else {
+                        Self.logger.info("Ignoring stale provider event. eventGeneration=\(generation, privacy: .public) currentGeneration=\(self.sessionGeneration, privacy: .public)")
+                        return
+                    }
+                    self.handleEvent(event)
                 }
             }
         }
@@ -305,7 +403,9 @@ final class RecognitionOrchestrator: ObservableObject {
                 let app = targetApp
                 let bundleID = targetBundleID
 
-                Task { @MainActor in
+                let processingGeneration = sessionGeneration
+                postProcessingTask?.cancel()
+                postProcessingTask = Task { @MainActor in
                     do {
                         let processed = try await withThrowingTaskGroup(of: String.self) { group in
                             // LLM 处理任务
@@ -329,15 +429,26 @@ final class RecognitionOrchestrator: ObservableObject {
                             throw CancellationError()
                         }
 
+                        guard !Task.isCancelled, self.sessionGeneration == processingGeneration else {
+                            Self.logger.info("Ignoring stale LLM post-processing result. processingGeneration=\(processingGeneration, privacy: .public) currentGeneration=\(self.sessionGeneration, privacy: .public)")
+                            return
+                        }
+
                         self.finalTranscript = processed.isEmpty ? textToProcess : processed
                         Self.logger.info("LLM post-processing completed. insertedText=\(self.finalTranscript, privacy: .public)")
                         self.previewState.isPostProcessing = false
                         self.previewState.transcript = ""
                         self.previewState.hintMessage = nil
+                        self.postProcessingTask = nil
                         if self.insertFinalText() {
                             self.dismissNow()
                         }
                     } catch {
+                        guard !Task.isCancelled, self.sessionGeneration == processingGeneration else {
+                            Self.logger.info("Ignoring stale LLM post-processing failure. processingGeneration=\(processingGeneration, privacy: .public) currentGeneration=\(self.sessionGeneration, privacy: .public)")
+                            return
+                        }
+
                         // 超时或失败，回退到基础结果
                         Self.logger.info("LLM post-processing timeout or failed, using basic result")
                         let processed = self.smartPostProcessor.processRulesOnly(text: textToProcess)
@@ -345,6 +456,7 @@ final class RecognitionOrchestrator: ObservableObject {
                         self.previewState.isPostProcessing = false
                         self.previewState.transcript = ""
                         self.previewState.hintMessage = "AI 优化超时，已插入原文"
+                        self.postProcessingTask = nil
                         if self.insertFinalText(), !self.isSessionActive {
                             self.scheduleDismiss(delay: 1.0)
                         }
@@ -400,10 +512,11 @@ final class RecognitionOrchestrator: ObservableObject {
         isSessionActive = false
         isSessionRunning = false
         activeProvider = nil
+        startingProvider = nil
         previewState.isRecording = false
 
         // 如果正在 LLM 后处理，推迟 dismiss，等 LLM Task 完成后再调用
-        if !previewState.isPostProcessing {
+        if !previewState.isPostProcessing, postProcessingTask == nil {
             scheduleDismiss(delay: previewState.errorMessage == nil ? 1.0 : 2.5)
         }
     }
@@ -412,6 +525,8 @@ final class RecognitionOrchestrator: ObservableObject {
         Self.logger.warning("Force ending recognition session")
         sessionTimeoutTask?.cancel()
         sessionTimeoutTask = nil
+        postProcessingTask?.cancel()
+        postProcessingTask = nil
         consumeEventsTask?.cancel()
         consumeEventsTask = nil
         stopAudioCapture(reason: "forceEndSession")
@@ -421,6 +536,7 @@ final class RecognitionOrchestrator: ObservableObject {
         isSessionActive = false
         isSessionRunning = false
         activeProvider = nil
+        startingProvider = nil
         previewState.isRecording = false
 
         scheduleDismiss(delay: 1.0)
@@ -449,6 +565,8 @@ final class RecognitionOrchestrator: ObservableObject {
         Self.logger.error("Session failed: \(message, privacy: .public)")
         sessionTimeoutTask?.cancel()
         sessionTimeoutTask = nil
+        postProcessingTask?.cancel()
+        postProcessingTask = nil
         stopAudioCapture(reason: "fail: \(message)")
         previewState.isVisible = true
         previewState.isRecording = false
@@ -463,6 +581,7 @@ final class RecognitionOrchestrator: ObservableObject {
         isSessionRunning = false
         consumeEventsTask?.cancel()
         activeProvider = nil
+        startingProvider = nil
 
         scheduleDismiss(delay: 2.5)
     }
@@ -471,6 +590,8 @@ final class RecognitionOrchestrator: ObservableObject {
         Self.logger.info("Dismissing session quietly. message=\(message, privacy: .public)")
         sessionTimeoutTask?.cancel()
         sessionTimeoutTask = nil
+        postProcessingTask?.cancel()
+        postProcessingTask = nil
         previewState.isRecording = false
         previewState.hintMessage = message
         previewState.transcript = ""
@@ -484,6 +605,7 @@ final class RecognitionOrchestrator: ObservableObject {
         consumeEventsTask = nil
         stopAudioCapture(reason: "dismissQuietly: \(message)")
         activeProvider = nil
+        startingProvider = nil
 
         scheduleDismiss(delay: 1.2)
     }
@@ -527,3 +649,5 @@ final class RecognitionOrchestrator: ObservableObject {
         return error.localizedDescription
     }
 }
+
+private struct SupersededSessionError: Error {}

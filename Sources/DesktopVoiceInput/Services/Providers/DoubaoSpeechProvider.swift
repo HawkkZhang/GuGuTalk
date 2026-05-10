@@ -15,6 +15,7 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
     private var hasEmittedFinalResult = false
     private var latestTranscript = ""
     private var hasRequestedFinish = false
+    private var transcriptUpdateIndex = 0
 
     override init() {
         var continuation: AsyncStream<TranscriptEvent>.Continuation?
@@ -45,6 +46,7 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
         self.hasEmittedFinalResult = false
         self.latestTranscript = ""
         self.hasRequestedFinish = false
+        self.transcriptUpdateIndex = 0
         self.transport = RealtimeWebSocketTransport(
             request: request,
             onMessage: { [weak self] message in
@@ -189,9 +191,11 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
         }
 
         if let transcript = DoubaoTranscriptPayload(resultValue: json["result"]), transcript.hasText {
+            let previousTranscript = latestTranscript
+            let repairedFromPrevious = false
             latestTranscript = transcript.canonicalText
             revision += 1
-            logTranscriptSnapshot(transcript, stage: "json", isTerminal: false)
+            logTranscriptSnapshot(transcript, stage: "json", isTerminal: false, previousTranscript: previousTranscript, emittedText: latestTranscript, repairedFromPrevious: repairedFromPrevious)
             Self.logger.debug("Received JSON transcript. utterances=\(transcript.utterances.count, privacy: .public) definite=\(transcript.definiteCount, privacy: .public) finishRequested=\(self.hasRequestedFinish, privacy: .public) text=\(self.latestTranscript, privacy: .public)")
             continuation.yield(.partialTextUpdated(text: latestTranscript, revision: revision))
             return
@@ -227,9 +231,18 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
             return
         }
 
-        latestTranscript = transcript.canonicalText
+        let previousTranscript = latestTranscript
+        var repairedFromPrevious = false
+        let candidateTranscript = transcript.canonicalText
+        if response.isTerminal, hasRequestedFinish {
+            let repaired = DoubaoTranscriptRepair.recoverFinalText(current: candidateTranscript, previous: previousTranscript)
+            latestTranscript = repaired.text
+            repairedFromPrevious = repaired.didRecover
+        } else {
+            latestTranscript = candidateTranscript
+        }
         revision += 1
-        logTranscriptSnapshot(transcript, stage: response.isTerminal ? "terminal" : "partial", isTerminal: response.isTerminal)
+        logTranscriptSnapshot(transcript, stage: response.isTerminal ? "terminal" : "partial", isTerminal: response.isTerminal, previousTranscript: previousTranscript, emittedText: latestTranscript, repairedFromPrevious: repairedFromPrevious)
 
         if response.isTerminal {
             Self.logger.debug("Received terminal transcript. utterances=\(transcript.utterances.count, privacy: .public) definite=\(transcript.definiteCount, privacy: .public) finishRequested=\(self.hasRequestedFinish, privacy: .public) text=\(self.latestTranscript, privacy: .public)")
@@ -247,28 +260,109 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
         }
     }
 
-    private func logTranscriptSnapshot(_ transcript: DoubaoTranscriptPayload, stage: String, isTerminal: Bool) {
+    private func logTranscriptSnapshot(
+        _ transcript: DoubaoTranscriptPayload,
+        stage: String,
+        isTerminal: Bool,
+        previousTranscript: String,
+        emittedText: String,
+        repairedFromPrevious: Bool
+    ) {
+        transcriptUpdateIndex += 1
         let rawText = transcript.rawCanonicalText
         let normalizedText = transcript.canonicalText
         let changedByNormalizer = rawText != normalizedText
         let rawForLog = rawText.escapedForDiagnosticLog
         let normalizedForLog = normalizedText.escapedForDiagnosticLog
+        let previousForLog = previousTranscript.escapedForDiagnosticLog
+        let emittedForLog = emittedText.escapedForDiagnosticLog
+        let lostPreviousPrefix = !previousTranscript.isEmpty &&
+            !normalizedText.isEmpty &&
+            !normalizedText.hasPrefix(previousTranscript)
+        let resultTextsForLog = transcript.rawResultTexts
+            .map { $0.escapedForDiagnosticLog }
+            .joined(separator: " | ")
+        let utterancesForLog = transcript.utteranceDiagnostics
+            .map(\.escapedForDiagnosticLog)
+            .joined(separator: " | ")
 
         if isTerminal || hasRequestedFinish || changedByNormalizer {
             Self.logger.info(
-                "Doubao transcript snapshot. stage=\(stage, privacy: .public) terminal=\(isTerminal, privacy: .public) finishRequested=\(self.hasRequestedFinish, privacy: .public) changedByNormalizer=\(changedByNormalizer, privacy: .public) raw=\"\(rawForLog, privacy: .public)\" normalized=\"\(normalizedForLog, privacy: .public)\" utterances=\(transcript.utterances.count, privacy: .public) definite=\(transcript.definiteCount, privacy: .public)"
+                "Doubao transcript snapshot. index=\(self.transcriptUpdateIndex, privacy: .public) stage=\(stage, privacy: .public) terminal=\(isTerminal, privacy: .public) finishRequested=\(self.hasRequestedFinish, privacy: .public) changedByNormalizer=\(changedByNormalizer, privacy: .public) lostPreviousPrefix=\(lostPreviousPrefix, privacy: .public) repairedFromPrevious=\(repairedFromPrevious, privacy: .public) previous=\"\(previousForLog, privacy: .public)\" raw=\"\(rawForLog, privacy: .public)\" normalized=\"\(normalizedForLog, privacy: .public)\" emitted=\"\(emittedForLog, privacy: .public)\" resultTexts=\"\(resultTextsForLog, privacy: .public)\" utterances=\"\(utterancesForLog, privacy: .public)\" utterancesCount=\(transcript.utterances.count, privacy: .public) definite=\(transcript.definiteCount, privacy: .public)"
             )
         } else {
             Self.logger.debug(
-                "Doubao transcript snapshot. stage=\(stage, privacy: .public) terminal=\(isTerminal, privacy: .public) finishRequested=\(self.hasRequestedFinish, privacy: .public) changedByNormalizer=\(changedByNormalizer, privacy: .public) raw=\"\(rawForLog, privacy: .public)\" normalized=\"\(normalizedForLog, privacy: .public)\" utterances=\(transcript.utterances.count, privacy: .public) definite=\(transcript.definiteCount, privacy: .public)"
+                "Doubao transcript snapshot. index=\(self.transcriptUpdateIndex, privacy: .public) stage=\(stage, privacy: .public) terminal=\(isTerminal, privacy: .public) finishRequested=\(self.hasRequestedFinish, privacy: .public) changedByNormalizer=\(changedByNormalizer, privacy: .public) lostPreviousPrefix=\(lostPreviousPrefix, privacy: .public) repairedFromPrevious=\(repairedFromPrevious, privacy: .public) previous=\"\(previousForLog, privacy: .public)\" raw=\"\(rawForLog, privacy: .public)\" normalized=\"\(normalizedForLog, privacy: .public)\" emitted=\"\(emittedForLog, privacy: .public)\" resultTexts=\"\(resultTextsForLog, privacy: .public)\" utterances=\"\(utterancesForLog, privacy: .public)\" utterancesCount=\(transcript.utterances.count, privacy: .public) definite=\(transcript.definiteCount, privacy: .public)"
             )
         }
+
+        let line = "[DoubaoTranscript] #\(transcriptUpdateIndex) stage=\(stage) terminal=\(isTerminal) finishRequested=\(hasRequestedFinish) changedByNormalizer=\(changedByNormalizer) lostPreviousPrefix=\(lostPreviousPrefix) repairedFromPrevious=\(repairedFromPrevious) previous=\"\(previousForLog)\" raw=\"\(rawForLog)\" normalized=\"\(normalizedForLog)\" emitted=\"\(emittedForLog)\" resultTexts=\"\(resultTextsForLog)\" utterances=\"\(utterancesForLog)\" utterancesCount=\(transcript.utterances.count) definite=\(transcript.definiteCount)"
+        NSLog("%@", line)
+        DoubaoTranscriptFileLogger.append(line)
     }
 
     private func emitSessionEndedIfNeeded() {
         guard !hasTerminatedSession else { return }
         hasTerminatedSession = true
         continuation.yield(.sessionEnded)
+    }
+}
+
+enum DoubaoTranscriptRepair {
+    static func recoverFinalText(current: String, previous: String) -> (text: String, didRecover: Bool) {
+        let current = current.trimmingCharacters(in: .whitespacesAndNewlines)
+        let previous = previous.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !current.isEmpty, !previous.isEmpty else {
+            return (current, false)
+        }
+
+        guard !current.hasPrefix(previous) else {
+            return (current, false)
+        }
+
+        let overlap = longestSuffixPrefixOverlap(left: previous, right: current)
+        guard semanticCharacterCount(overlap) >= 2 else {
+            return (current, false)
+        }
+
+        let prefixToRecover = String(previous.dropLast(overlap.count))
+        guard semanticCharacterCount(prefixToRecover) >= 1 else {
+            return (current, false)
+        }
+
+        let merged = TranscriptTextNormalizer.normalizeSpeechText(prefixToRecover + current)
+        guard !merged.isEmpty else {
+            return (current, false)
+        }
+
+        return (merged, true)
+    }
+
+    private static func longestSuffixPrefixOverlap(left: String, right: String) -> String {
+        let leftCharacters = Array(left)
+        let rightCharacters = Array(right)
+        let maxLength = min(leftCharacters.count, rightCharacters.count)
+
+        guard maxLength > 0 else { return "" }
+
+        for length in stride(from: maxLength, through: 1, by: -1) {
+            let leftSuffix = leftCharacters[(leftCharacters.count - length)..<leftCharacters.count]
+            let rightPrefix = rightCharacters[0..<length]
+            if Array(leftSuffix) == Array(rightPrefix) {
+                return String(leftSuffix)
+            }
+        }
+
+        return ""
+    }
+
+    private static func semanticCharacterCount(_ text: String) -> Int {
+        text.unicodeScalars.reduce(into: 0) { count, scalar in
+            if CharacterSet.letters.contains(scalar) || CharacterSet.decimalDigits.contains(scalar) {
+                count += 1
+            }
+        }
     }
 }
 
@@ -417,6 +511,7 @@ private enum DoubaoFrameParser {
 struct DoubaoTranscriptPayload {
     let text: String?
     let rawText: String?
+    let rawResultTexts: [String]
     let utterances: [DoubaoUtterance]
 
     var hasText: Bool {
@@ -452,6 +547,15 @@ struct DoubaoTranscriptPayload {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    var utteranceDiagnostics: [String] {
+        utterances.map { utterance in
+            let definite = utterance.isDefinite ? "definite" : "partial"
+            let start = utterance.startTime.map(String.init) ?? "?"
+            let end = utterance.endTime.map(String.init) ?? "?"
+            return "\(start)-\(end):\(definite):\(utterance.rawText)"
+        }
+    }
+
     init?(resultValue: Any?) {
         if let resultObject = resultValue as? [String: Any] {
             self.init(resultObjects: [resultObject])
@@ -467,14 +571,15 @@ struct DoubaoTranscriptPayload {
     }
 
     private init?(resultObjects: [[String: Any]]) {
-        let rawText = resultObjects
+        let rawResultTexts = resultObjects
             .compactMap { $0["text"] as? String }
             .map(Self.trimRawText)
+
+        let rawText = rawResultTexts
             .filter { !$0.isEmpty }
             .joined()
 
-        let normalizedText = resultObjects
-            .compactMap { $0["text"] as? String }
+        let normalizedText = rawResultTexts
             .map(Self.sanitize)
             .filter { !$0.isEmpty }
             .joined()
@@ -485,6 +590,7 @@ struct DoubaoTranscriptPayload {
 
         self.text = normalizedText.isEmpty ? nil : normalizedText
         self.rawText = rawText.isEmpty ? nil : rawText
+        self.rawResultTexts = rawResultTexts
         self.utterances = utterances
 
         guard hasText else { return nil }
@@ -496,6 +602,36 @@ struct DoubaoTranscriptPayload {
 
     private static func trimRawText(_ text: String) -> String {
         text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+private enum DoubaoTranscriptFileLogger {
+    private static let queue = DispatchQueue(label: "com.end.DesktopVoiceInput.doubaoTranscriptLog")
+
+    static func append(_ line: String) {
+        queue.async {
+            do {
+                let fileURL = try logFileURL()
+                let data = Data((line + "\n").utf8)
+                if !FileManager.default.fileExists(atPath: fileURL.path) {
+                    FileManager.default.createFile(atPath: fileURL.path, contents: nil)
+                }
+                let handle = try FileHandle(forWritingTo: fileURL)
+                try handle.seekToEnd()
+                try handle.write(contentsOf: data)
+                try handle.close()
+            } catch {
+                NSLog("[DoubaoTranscript] failed to write debug log: %@", error.localizedDescription)
+            }
+        }
+    }
+
+    private static func logFileURL() throws -> URL {
+        let directory = FileManager.default
+            .homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/GuGuTalk", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory.appendingPathComponent("doubao-transcripts.log")
     }
 }
 

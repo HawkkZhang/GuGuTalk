@@ -7,9 +7,16 @@ import os
 final class VoiceInputAppModel: ObservableObject {
     private static let logger = Logger(subsystem: "com.end.DesktopVoiceInput", category: "VoiceInputAppModel")
 
-    private enum ActiveTriggerKind {
+    private enum ActiveTriggerKind: String {
         case holdToTalk
         case toggleToTalk
+
+        var title: String {
+            switch self {
+            case .holdToTalk: "hold"
+            case .toggleToTalk: "toggle"
+            }
+        }
     }
 
     var settings: AppSettings
@@ -354,21 +361,13 @@ final class VoiceInputAppModel: ObservableObject {
     }
 
     private func beginCaptureUsingHoldHotkey() async {
-        guard activeTriggerKind == nil, !orchestrator.isSessionRunning, !isTransitioning else {
-            Self.logger.info("Hold hotkey begin ignored. activeTrigger=\(String(describing: self.activeTriggerKind), privacy: .public) isSessionRunning=\(self.orchestrator.isSessionRunning, privacy: .public) isTransitioning=\(self.isTransitioning, privacy: .public)")
+        if activeTriggerKind != nil || orchestrator.hasActiveWork || isTransitioning {
+            Self.logger.info("Hold hotkey begin requested while previous work is still active; restarting. activeTrigger=\(String(describing: self.activeTriggerKind), privacy: .public) hasActiveWork=\(self.orchestrator.hasActiveWork, privacy: .public) isTransitioning=\(self.isTransitioning, privacy: .public)")
+            await restartCapture(using: .holdToTalk, reason: "hold hotkey pressed while previous work was active")
             return
         }
-        Self.logger.info("Hold hotkey begin accepted")
-        activeTriggerKind = .holdToTalk
-        isTransitioning = true
-        hotkeyManager.notifySessionStarted()
-        await orchestrator.beginCapture()
-        isTransitioning = false
-        if !orchestrator.isSessionRunning {
-            Self.logger.info("Hold hotkey begin ended before session became running")
-            activeTriggerKind = nil
-            hotkeyManager.notifySessionEnded()
-        }
+
+        await startCapture(using: .holdToTalk)
     }
 
     private func endCaptureUsingHoldHotkey() async {
@@ -381,30 +380,45 @@ final class VoiceInputAppModel: ObservableObject {
     }
 
     private func toggleCaptureUsingToggleHotkey() async {
-        guard !isTransitioning else {
-            Self.logger.info("Toggle hotkey ignored because capture transition is in progress")
-            return
-        }
-
-        if activeTriggerKind == .toggleToTalk || (activeTriggerKind == nil && orchestrator.isSessionRunning) {
+        if activeTriggerKind == .toggleToTalk {
             Self.logger.info("Toggle hotkey ending active capture")
-            activeTriggerKind = .toggleToTalk
             await orchestrator.endCapture()
             return
         }
 
-        guard activeTriggerKind == nil, !orchestrator.isSessionRunning else {
-            Self.logger.info("Toggle hotkey begin ignored. activeTrigger=\(String(describing: self.activeTriggerKind), privacy: .public) isSessionRunning=\(self.orchestrator.isSessionRunning, privacy: .public)")
+        if activeTriggerKind != nil || orchestrator.hasActiveWork || isTransitioning {
+            Self.logger.info("Toggle hotkey begin requested while previous work is still active; restarting. activeTrigger=\(String(describing: self.activeTriggerKind), privacy: .public) hasActiveWork=\(self.orchestrator.hasActiveWork, privacy: .public) isTransitioning=\(self.isTransitioning, privacy: .public)")
+            await restartCapture(using: .toggleToTalk, reason: "toggle hotkey pressed while previous work was active")
             return
         }
-        Self.logger.info("Toggle hotkey begin accepted")
-        activeTriggerKind = .toggleToTalk
+
+        await startCapture(using: .toggleToTalk)
+    }
+
+    private func restartCapture(using trigger: ActiveTriggerKind, reason: String) async {
+        Self.logger.info("Restarting capture from user trigger. trigger=\(trigger.title, privacy: .public) reason=\(reason, privacy: .public)")
+        isTransitioning = true
+        activeTriggerKind = nil
+        hotkeyManager.notifySessionEnded()
+        await orchestrator.cancelActiveWorkForRestart(reason: reason)
+        isTransitioning = false
+        await startCapture(using: trigger)
+    }
+
+    private func startCapture(using trigger: ActiveTriggerKind) async {
+        guard activeTriggerKind == nil, !orchestrator.hasActiveWork, !isTransitioning else {
+            Self.logger.info("Capture begin ignored. trigger=\(trigger.title, privacy: .public) activeTrigger=\(String(describing: self.activeTriggerKind), privacy: .public) hasActiveWork=\(self.orchestrator.hasActiveWork, privacy: .public) isTransitioning=\(self.isTransitioning, privacy: .public)")
+            return
+        }
+
+        Self.logger.info("Capture begin accepted. trigger=\(trigger.title, privacy: .public)")
+        activeTriggerKind = trigger
         isTransitioning = true
         hotkeyManager.notifySessionStarted()
         await orchestrator.beginCapture()
         isTransitioning = false
         if !orchestrator.isSessionRunning {
-            Self.logger.info("Toggle hotkey begin ended before session became running")
+            Self.logger.info("Capture begin ended before session became running. trigger=\(trigger.title, privacy: .public)")
             activeTriggerKind = nil
             hotkeyManager.notifySessionEnded()
         }
