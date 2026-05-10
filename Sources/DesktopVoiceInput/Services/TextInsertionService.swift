@@ -14,13 +14,13 @@ final class TextInsertionService {
 
         Self.logger.info("开始插入文本，目标应用: \(targetApp ?? "未知", privacy: .public)，文本长度: \(text.count)")
 
-        if targetBundleID == Bundle.main.bundleIdentifier {
-            Self.logger.warning("目标是自己的窗口，拒绝插入")
+        if targetBundleID == Bundle.main.bundleIdentifier, !focusedElementLooksEditable() {
+            Self.logger.warning("目标是自己的窗口，但焦点不是可输入控件，拒绝插入")
             return InsertionResult(
                 method: .failed,
                 targetAppName: targetApp,
                 succeeded: false,
-                failureReason: "当前焦点还在 GuGuTalk 自己的窗口里。为了避免把识别结果写坏设置项，这次不会自动插入。请先切到目标应用再说话。"
+                failureReason: "当前焦点不在可输入区域。请先点进 GuGuTalk 的文本框或切到目标应用。"
             )
         }
 
@@ -51,11 +51,7 @@ final class TextInsertionService {
     private func accessibilityInsertion(text: String, targetApp: String?) -> InsertionResult? {
         guard AXIsProcessTrusted() else { return nil }
 
-        let systemWide = AXUIElementCreateSystemWide()
-        var focusedObject: AnyObject?
-        let focusedResult = AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focusedObject)
-
-        guard focusedResult == .success, let focusedElement = focusedObject.map({ unsafeDowncast($0, to: AXUIElement.self) }) else {
+        guard let focusedElement = focusedElement() else {
             return nil
         }
 
@@ -88,6 +84,43 @@ final class TextInsertionService {
 
         AXUIElementSetAttributeValue(focusedElement, kAXSelectedTextRangeAttribute as CFString, newRangeValue)
         return InsertionResult(method: .accessibility, targetAppName: targetApp, succeeded: true, failureReason: nil)
+    }
+
+    private func focusedElement() -> AXUIElement? {
+        guard AXIsProcessTrusted() else { return nil }
+
+        let systemWide = AXUIElementCreateSystemWide()
+        var focusedObject: AnyObject?
+        let focusedResult = AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focusedObject)
+        guard focusedResult == .success, let focusedObject else { return nil }
+        return unsafeDowncast(focusedObject, to: AXUIElement.self)
+    }
+
+    private func focusedElementLooksEditable() -> Bool {
+        guard let focusedElement = focusedElement() else { return false }
+
+        var roleObject: AnyObject?
+        let roleResult = AXUIElementCopyAttributeValue(focusedElement, kAXRoleAttribute as CFString, &roleObject)
+        let role = roleResult == .success ? roleObject as? String : nil
+
+        let editableRoles: Set<String> = [
+            kAXTextFieldRole as String,
+            kAXTextAreaRole as String,
+            kAXComboBoxRole as String
+        ]
+        if let role, editableRoles.contains(role) {
+            return true
+        }
+
+        var settableObject: DarwinBoolean = false
+        let settableResult = AXUIElementIsAttributeSettable(focusedElement, kAXValueAttribute as CFString, &settableObject)
+        if settableResult == .success, settableObject.boolValue {
+            return true
+        }
+
+        var selectedRangeObject: AnyObject?
+        let selectedRangeResult = AXUIElementCopyAttributeValue(focusedElement, kAXSelectedTextRangeAttribute as CFString, &selectedRangeObject)
+        return selectedRangeResult == .success
     }
 
     private func normalizedEditableValue(_ currentValue: String, from element: AXUIElement) -> String {

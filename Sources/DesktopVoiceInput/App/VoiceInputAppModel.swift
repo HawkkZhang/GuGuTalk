@@ -1,9 +1,12 @@
 import AppKit
 import Combine
 import Foundation
+import os
 
 @MainActor
 final class VoiceInputAppModel: ObservableObject {
+    private static let logger = Logger(subsystem: "com.end.DesktopVoiceInput", category: "VoiceInputAppModel")
+
     private enum ActiveTriggerKind {
         case holdToTalk
         case toggleToTalk
@@ -309,16 +312,20 @@ final class VoiceInputAppModel: ObservableObject {
 
     private func updateHotkeyMonitoring() {
         if hotkeyPermissionsReady {
+            Self.logger.debug("Hotkey permissions ready; ensuring monitor is active")
             hotkeyManager.start()
         } else {
+            Self.logger.debug("Hotkey permissions missing; stopping monitor")
             hotkeyManager.stop()
         }
     }
 
     private func reloadHotkeysIfReady() {
         if hotkeyPermissionsReady {
+            Self.logger.info("Reloading hotkeys after configuration change")
             hotkeyManager.reloadConfiguration()
         } else {
+            Self.logger.debug("Hotkey configuration changed while permissions are missing")
             hotkeyManager.stop()
         }
     }
@@ -347,39 +354,57 @@ final class VoiceInputAppModel: ObservableObject {
     }
 
     private func beginCaptureUsingHoldHotkey() async {
-        guard activeTriggerKind == nil, !orchestrator.isSessionRunning, !isTransitioning else { return }
+        guard activeTriggerKind == nil, !orchestrator.isSessionRunning, !isTransitioning else {
+            Self.logger.info("Hold hotkey begin ignored. activeTrigger=\(String(describing: self.activeTriggerKind), privacy: .public) isSessionRunning=\(self.orchestrator.isSessionRunning, privacy: .public) isTransitioning=\(self.isTransitioning, privacy: .public)")
+            return
+        }
+        Self.logger.info("Hold hotkey begin accepted")
         activeTriggerKind = .holdToTalk
         isTransitioning = true
         hotkeyManager.notifySessionStarted()
         await orchestrator.beginCapture()
         isTransitioning = false
         if !orchestrator.isSessionRunning {
+            Self.logger.info("Hold hotkey begin ended before session became running")
             activeTriggerKind = nil
             hotkeyManager.notifySessionEnded()
         }
     }
 
     private func endCaptureUsingHoldHotkey() async {
-        guard activeTriggerKind == .holdToTalk else { return }
+        guard activeTriggerKind == .holdToTalk else {
+            Self.logger.info("Hold hotkey end ignored. activeTrigger=\(String(describing: self.activeTriggerKind), privacy: .public)")
+            return
+        }
+        Self.logger.info("Hold hotkey end accepted")
         await orchestrator.endCapture()
     }
 
     private func toggleCaptureUsingToggleHotkey() async {
-        guard !isTransitioning else { return }
+        guard !isTransitioning else {
+            Self.logger.info("Toggle hotkey ignored because capture transition is in progress")
+            return
+        }
 
         if activeTriggerKind == .toggleToTalk || (activeTriggerKind == nil && orchestrator.isSessionRunning) {
+            Self.logger.info("Toggle hotkey ending active capture")
             activeTriggerKind = .toggleToTalk
             await orchestrator.endCapture()
             return
         }
 
-        guard activeTriggerKind == nil, !orchestrator.isSessionRunning else { return }
+        guard activeTriggerKind == nil, !orchestrator.isSessionRunning else {
+            Self.logger.info("Toggle hotkey begin ignored. activeTrigger=\(String(describing: self.activeTriggerKind), privacy: .public) isSessionRunning=\(self.orchestrator.isSessionRunning, privacy: .public)")
+            return
+        }
+        Self.logger.info("Toggle hotkey begin accepted")
         activeTriggerKind = .toggleToTalk
         isTransitioning = true
         hotkeyManager.notifySessionStarted()
         await orchestrator.beginCapture()
         isTransitioning = false
         if !orchestrator.isSessionRunning {
+            Self.logger.info("Toggle hotkey begin ended before session became running")
             activeTriggerKind = nil
             hotkeyManager.notifySessionEnded()
         }

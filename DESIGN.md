@@ -2,17 +2,20 @@
 name: Desktop Voice Input
 description: A quiet native macOS voice input utility for Chinese writing workflows.
 colors:
-  accent-blue: "#0066D6"
-  accent-green: "#007A4F"
-  accent-amber: "#B86B00"
-  danger-red: "#C22938"
-  text-primary: "#1F2126"
-  text-secondary: "#5C616B"
-  border-subtle: "#BDC0C7"
-  surface-light: "#F3F4F6"
-  surface-panel-light: "#FCFCFD"
-  surface-dark: "#1F2023"
-  surface-panel-dark: "#2B2C2F"
+  icon-aqua: "#29B8C7"
+  icon-aqua-deep: "#0A7887"
+  icon-aqua-soft: "#D4F7FA"
+  icon-orange: "#F28C38"
+  ready-green: "#159B70"
+  signal-amber: "#D16E1A"
+  danger-red: "#D62E2E"
+  text-primary: "#142226"
+  text-secondary: "#506B6E"
+  border-subtle: "#A0C7CC"
+  surface-paper: "#F1FAFA"
+  surface-panel: "#FFFCF5"
+  surface-dark: "#0F1A1C"
+  surface-panel-dark: "#1F3033"
 typography:
   title:
     fontFamily: "system-ui"
@@ -39,7 +42,7 @@ spacing:
   lg: "24px"
 components:
   button-primary:
-    backgroundColor: "{colors.accent-blue}"
+    backgroundColor: "{colors.icon-aqua}"
     textColor: "{colors.surface-panel-light}"
     rounded: "{rounded.sm}"
     padding: "6px 12px"
@@ -53,46 +56,49 @@ components:
 
 ## 1. Overview
 
-**Creative North Star: "Quiet Mac Companion"**
+**Creative North Star: "Aqua Chick Companion"**
 
-Desktop Voice Input should feel like a small native utility that belongs beside Spotlight, Shortcuts, and the menu bar. The interface is compact, scan-friendly, and calm. It uses system typography, macOS-like neutral surfaces, and small semantic state colors so the product disappears into the user's writing flow while still making state changes easy to read.
+Desktop Voice Input should feel like a crafted Mac companion built around the GuGuTalk icon: clear aqua, soft white, and a small warm orange note. The interface is compact and scan-friendly, but no longer relies on default gray panels or system blue. It uses system typography and custom controls so the product has a recognizable identity without feeling like a flashy AI tool.
 
 The system rejects flashy AI styling, web-dashboard density, game-panel drama, and decorative effects that make simple actions feel loud.
 
 **Key Characteristics:**
 - Native macOS controls and system font.
-- Native neutral surfaces with blue, green, amber, and red reserved for state.
+- Light aqua surfaces with icon-aqua as the primary action and selection color.
 - Compact panels with shallow elevation and clear dividers.
 - Smooth state feedback without ornamental motion.
 
 ## 2. Colors
 
-The palette is a native-neutral utility palette: light and dark surfaces should feel close to macOS system panels. Color is not atmosphere. Color is only for action, selection, recording, readiness, warning, and error.
+The palette is extracted from the app icon: aqua background, soft white body, and orange beak/feet. Color should add identity and legibility, not decoration. Amber and red remain semantic only.
 
 ### Primary
-- **System Blue** (#0066D6): Primary action, selected controls, and active focus.
+- **Icon Aqua** (#29B8C7): Primary action, selected controls, recording signal, and focused custom controls.
+- **Deep Aqua** (#0A7887): Strong active states and overlay recording background.
+- **Aqua Soft** (#D4F7FA): Quiet selected backgrounds, provider-ready surfaces, and subtle atmosphere.
+- **Icon Orange** (#F28C38): Tiny brand warmth only, never large decorative fills.
 
 ### Secondary
-- **Ready Green** (#007A4F): Ready, success, recording health, and usable permission state.
-- **Signal Amber** (#B86B00): Caution, attention, and configuration warnings.
+- **Ready Green** (#008F63): Ready, success, recording health, and usable permission state.
+- **Signal Amber** (#C27514): Caution, attention, and configuration warnings.
 
 ### Tertiary
-- **Error Red** (#C22938): Errors, blocked states, and destructive attention.
+- **Error Red** (#D1332E): Errors, blocked states, and destructive attention.
 
 ### Neutral
-- **Ink** (#1F2126): Primary text in light mode.
-- **Secondary Ink** (#5C616B): Secondary labels and helper text.
-- **Subtle Border** (#BDC0C7): Dividers and quiet outlines.
-- **Light Surface** (#F3F4F6): Window background in light mode.
-- **Light Panel** (#FCFCFD): Raised content surfaces in light mode.
-- **Dark Surface** (#1F2023): Window background in dark mode.
-- **Dark Panel** (#2B2C2F): Raised content surfaces in dark mode.
+- **Ink** (#171F1D): Primary text in light mode.
+- **Secondary Ink** (#55665E): Secondary labels and helper text.
+- **Subtle Border** (#B3C2AD): Dividers and quiet outlines.
+- **Paper Surface** (#F4F2E6): Window background in light mode.
+- **Panel Surface** (#FCFAF0): Raised content surfaces in light mode.
+- **Dark Surface** (#111917): Window background in dark mode.
+- **Dark Panel** (#1F2B27): Raised content surfaces in dark mode.
 
 ### Named Rules
 
-**The State Color Rule.** Blue, green, amber, and red are for state and action only. They should be legible, distinct, and never used as decoration.
+**The State Color Rule.** Aqua, green, amber, and red are for state and action. Icon orange is allowed only as a very small brand note.
 
-**The Selection Rule.** Selected controls should use Action Blue through native tint plus a visibly stronger fill or outline when custom-drawn. Inactive controls stay neutral.
+**The Selection Rule.** Selected custom controls should use a solid aqua fill and white text. Inactive controls stay on soft aqua or warm-white surfaces.
 
 ## 3. Typography
 
@@ -114,7 +120,7 @@ The palette is a native-neutral utility palette: light and dark surfaces should 
 
 ## 4. Elevation
 
-Depth is conveyed through native macOS material, subtle borders, and small shadows. Surfaces should feel layered but not glassy or decorative.
+Depth is conveyed through solid surfaces, subtle borders, and small shadows. Avoid translucent glassmorphism; the recording overlay should never look like an accidental gray blur.
 
 ### Shadow Vocabulary
 - **Panel Lift** (`0 6px 16px rgba(0,0,0,0.08)`): Floating menu and overlay panels only.
@@ -127,8 +133,8 @@ Depth is conveyed through native macOS material, subtle borders, and small shado
 ## 5. Components
 
 ### Buttons
-- **Shape:** Native macOS button shapes, normally 6px visual radius.
-- **Primary:** System bordered prominent for the main action in a group.
+- **Shape:** Continuous rounded rectangles with a consistent radius scale.
+- **Primary:** Solid aqua fill with white text for the main action in a group.
 - **Hover / Focus:** Follow native macOS behavior; add no decorative glow.
 - **Secondary / Ghost / Tertiary:** Use bordered or plain styles according to system conventions.
 
@@ -138,11 +144,11 @@ Depth is conveyed through native macOS material, subtle borders, and small shado
 
 ### Chips
 - **Style:** Compact text or icon plus text, with a subtle background tint only when showing state.
-- **State:** Use mint for ready, amber for warning, red for error, blue for active.
+- **State:** Use aqua for active, green for ready, amber for warning, red for error.
 
 ### Cards / Containers
 - **Corner Style:** 10px for app panels, 7px for inline controls, 12px only for floating overlay shells.
-- **Background:** Native window and control background colors.
+- **Background:** Soft aqua and warm-white control backgrounds.
 - **Shadow Strategy:** Use shallow elevation only for menu and overlay surfaces.
 - **Border:** One-pixel separator color with low opacity.
 - **Internal Padding:** 10-24px depending on density.
@@ -160,12 +166,12 @@ Depth is conveyed through native macOS material, subtle borders, and small shado
 - **Selection consistency:** Settings selections use native segmented controls. Custom colored blocks are for status only, never for choosing one option.
 
 ### Inputs / Fields
-- **Style:** Native rounded border fields.
+- **Style:** Quiet custom fields on elevated warm surfaces.
 - **Focus:** Native focus ring.
 - **Error / Disabled:** Keep labels readable and use concise inline messages.
 
 ### Navigation
-- **Style:** No custom navigation chrome. Settings use grouped sections and native controls.
+- **Style:** A compact custom sidebar is acceptable, but selected state must be visually consistent and unmistakable.
 
 ### App Entry / Onboarding Window
 - **Launch behavior:** Opening GuGuTalk from Finder, Launchpad, or `/Applications` should show a real app window. The app must not appear to disappear into the menu bar.
@@ -178,12 +184,14 @@ Depth is conveyed through native macOS material, subtle borders, and small shado
 - **Structure:** Use a compact native status header, a concise shortcut summary, conditional notices, and a small action row.
 - **Density:** Do not repeat app name, permission details, or provider setup text unless the user is blocked.
 - **Notices:** Permission and error content should appear as compact state strips, not full cards.
-- **Color:** Stay very close to macOS system panels. Use only a small status dot and subtle notice outlines for state.
+- **Color:** Stay compact and Mac-like, but use the icon-aqua brand system consistently instead of default blue-gray controls.
 
 ### Recording Overlay
 - **Purpose:** Confirm that the app is listening, show live recognition, and stay out of the user's workspace.
 - **Initial size:** Start compact when there is no recognized text.
 - **Expansion:** Grow smoothly as recognized text appears, capped to a modest maximum size.
+- **Surface consistency:** Waiting waveform and live transcript use the same icon-aqua theme surface. Do not switch to a different bubble color just because text has not arrived yet.
+- **Edges:** The rounded overlay must not show square backing, hidden glass frames, or heavy shadows outside the shape.
 - **Transcript:** Show the newest recognized text. When content is too long, keep the tail and prefix the whole transcript with a single ellipsis. Never truncate again inside later lines.
 - **Waveform:** Use a compact animated waveform as the primary recording indicator before text appears. Once transcript text exists, embed the waveform as a quiet background signal so it does not consume its own row.
 - **Motion:** Use soft 150-250 ms transitions for expansion, transcript reveal, and state changes.

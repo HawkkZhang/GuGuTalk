@@ -57,6 +57,14 @@
 - GitHub repository: `https://github.com/HawkkZhang/GuGuSpeak`.
 - Local development branch is currently `main`, tracking `origin/main`.
 - Product name in the installed app is currently `GuGuTalk`; repository/project names still include `GuGuSpeak` / `DesktopVoiceInput`.
+- Current UI direction is `Aqua Chick Companion`: theme colors are derived from the app icon, with icon-aqua as the main action/selection color and icon-orange only as a small warmth accent. The UI should use custom refined controls, system font, compact Mac utility structure, no gray glassmorphism, no neon/cyber styling.
+- Recording overlay normal states should use one consistent icon-aqua theme surface between the initial waveform state and the live transcript state; avoid hidden square backgrounds, heavy shadows, and glass-like frames around the rounded shape.
+- Chinese speech text should remove pause-induced spaces between Han characters and around Chinese punctuation while preserving normal English word spaces. This applies to Doubao partial/final text and final insertion post-processing.
+- The punctuation mode labeled `去掉句尾句号` must only remove terminal period marks (`。`, `.`, `．`, `｡`). It must not remove question marks or exclamation marks returned by providers.
+- Capture endpointing should be user-controlled. Hold-to-talk and toggle-to-talk sessions should end on the user's release/stop action, not on provider VAD silence detection.
+- Recognition is single-session only, but async cleanup must be session-scoped: final-result timeout tasks, pending stops, and finish requests must not leak across sessions or terminate a later hold-to-talk recording.
+- GuGuTalk must be usable inside its own text fields, including prompt and provider configuration fields. Shortcut recording should suspend global hotkeys only while recording a shortcut; do not block all insertion just because the foreground app is GuGuTalk.
+- Doubao diagnostics intentionally log raw provider transcript text and normalized transcript text in Release builds for terminal/final-relevant events while this issue is being verified. Remove or gate these transcript-content logs before a privacy-sensitive public release.
 
 ## Latest Synced State - 2026-05-08
 
@@ -71,6 +79,19 @@ These changes have been pushed to GitHub on `main` at commit `5521384`:
 - After app launch or reopen from Finder/Launchpad, expected UX is:
   - missing required permissions -> open Permissions page
   - permissions ready -> open General/Home page
+
+## Latest Local Fixes - 2026-05-10
+
+### Hold-to-talk recording cut off by stale final timeout
+
+- Evidence from logs showed the hotkey release happened after the cutoff, so this was not a key-up detection issue.
+- `RecognitionOrchestrator` logged `Session timed out waiting for final result` during a later recording, meaning an old final-result timeout task was force-ending the new session.
+- `RecognitionOrchestrator` now increments a `sessionGeneration` for every capture and only lets a timeout finish the generation that created it.
+- Starting, quiet dismissal, failure, normal finish, and force finish now cancel stale timeout state.
+- End handling is now explicitly guarded: release before provider readiness becomes a pending stop; release during recording starts finishing; duplicate finish calls are ignored.
+- If the provider already ended during the tail-buffer delay or `finishAudio()`, no new final timeout is scheduled.
+- Overlay prompt bubbles now share the normal aqua recording surface; system prompts are differentiated by text style instead of a separate bubble color.
+- Verified locally: Debug `xcodebuild` passed, Release `xcodebuild` passed, `swift test` passed 16 tests, latest Release app launched from `/tmp/DesktopVoiceInputReleaseDerivedData/Build/Products/Release/DesktopVoiceInput.app` with PID `11291`.
 
 ## Not Yet Fully Implemented
 
@@ -99,13 +120,19 @@ These changes have been pushed to GitHub on `main` at commit `5521384`:
   - Qwen
 - Make fallback reasons and provider switching reasons visible to the user.
 - Improve failure messages so they are easier for non-technical users to understand.
-- Continue validating Doubao streaming assembly against official `utterances[].definite` semantics; do not solve client-side partial/final duplication by turning on semantic smoothing.
+- Doubao streaming handling was re-reviewed against the `bigmodel_async` API:
+  - request uses `result_type = "full"` so the provider returns the full current transcript
+  - preview and final text should directly replace with provider `result.text`
+  - request keeps `show_utterances = true` for diagnostics and fallback parsing only
+  - client-side utterance assembly / dedupe is intentionally avoided because it can create repeated words
+  - `result` parsing supports both object and list shapes
+- Continue validating Doubao with real speech logs. If duplicates still appear, inspect the raw provider `result.text` before adding any local correction. Debug builds now log `raw` vs `normalized` transcript text when Chinese pause-space cleanup changes the returned text.
 
 ### Text Quality
 
 - `TranscriptPostProcessor` is still minimal.
 - It currently only does:
-  - whitespace cleanup
+  - whitespace cleanup, including Chinese pause-space removal
   - limited Chinese punctuation cleanup
   - terminal punctuation append
 - Still missing:

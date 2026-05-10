@@ -268,7 +268,7 @@ final class AppSettings: ObservableObject {
             sampleRate: 16_000,
             mode: preferredMode,
             partialResultsEnabled: true,
-            endpointing: .voiceActivityDetection,
+            endpointing: .manual,
             doubaoCredentials: DoubaoCredentials(
                 appID: doubaoAppID.trimmingCharacters(in: .whitespacesAndNewlines),
                 accessKey: doubaoAccessKey.trimmingCharacters(in: .whitespacesAndNewlines),

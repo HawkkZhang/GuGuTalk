@@ -16,10 +16,10 @@ struct PermissionGuideView: View {
             HStack(alignment: .top, spacing: 10) {
                 ZStack {
                     DVITheme.controlShape()
-                        .fill(DVITheme.stateFill(appModel.hasMissingPermissions ? caution : ready, emphasized: true))
+                        .fill(appModel.hasMissingPermissions ? DVITheme.stateFill(caution, emphasized: true) : DVITheme.accent)
                     Image(systemName: appModel.hasMissingPermissions ? "hand.raised.fill" : "checkmark")
                         .font(.system(size: compact ? 16 : 18, weight: .semibold))
-                        .foregroundStyle(appModel.hasMissingPermissions ? caution : ready)
+                        .foregroundStyle(appModel.hasMissingPermissions ? caution : DVITheme.selectedInk)
                 }
                 .frame(width: compact ? 34 : 38, height: compact ? 34 : 38)
 
@@ -66,8 +66,9 @@ struct PermissionGuideView: View {
         .background(DVITheme.panel, in: DVITheme.panelShape())
         .overlay(
             DVITheme.panelShape()
-                .stroke(DVITheme.separator.opacity(0.45), lineWidth: 1)
+                .stroke(DVITheme.separator.opacity(0.24), lineWidth: 1)
         )
+        .shadow(color: DVITheme.overlayShadow.opacity(compact ? 0 : 0.05), radius: 12, x: 0, y: 5)
     }
 
     private var missingPermissions: [AppPermissionKind] {
@@ -105,7 +106,12 @@ struct PermissionGuideView: View {
                 Button(appModel.actionLabel(for: permission)) {
                     appModel.handlePermissionAction(permission)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.plain)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(DVITheme.selectedInk)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 7)
+                .background(DVITheme.accent, in: DVITheme.controlShape())
             }
         }
         .padding(.vertical, compact ? 2 : 4)

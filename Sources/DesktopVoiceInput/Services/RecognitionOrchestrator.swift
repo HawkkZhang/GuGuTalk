@@ -24,7 +24,10 @@ final class RecognitionOrchestrator: ObservableObject {
     private var dismissTask: Task<Void, Never>?
     private var finalTranscript: String = ""
     private var isPendingStop = false
+    private var isStartingSession = false
     private var isSessionActive = false
+    private var isFinishRequested = false
+    private var sessionGeneration = 0
 
     init(
         settings: AppSettings,
@@ -47,8 +50,15 @@ final class RecognitionOrchestrator: ObservableObject {
     }
 
     func beginCapture() async {
-        guard !isSessionActive else { return }
+        guard !isStartingSession, !isSessionActive else {
+            Self.logger.info("beginCapture ignored because a session is already active")
+            return
+        }
 
+        sessionGeneration += 1
+        let generation = sessionGeneration
+        sessionTimeoutTask?.cancel()
+        sessionTimeoutTask = nil
         dismissTask?.cancel()
         dismissTask = nil
 
@@ -57,6 +67,8 @@ final class RecognitionOrchestrator: ObservableObject {
         lastErrorMessage = nil
         lastInsertionResult = nil
         isPendingStop = false
+        isStartingSession = true
+        isFinishRequested = false
 
         // 快速检查权限（不弹窗）
         await permissionCoordinator.refreshAll(promptForSystemDialogs: false)
@@ -81,6 +93,7 @@ final class RecognitionOrchestrator: ObservableObject {
         previewState.title = "正在聆听"
         previewState.message = "正在启动识别引擎"
         previewState.isRecording = true
+        Self.logger.info("Starting capture. generation=\(generation, privacy: .public) mode=\(config.mode.title, privacy: .public) sampleRate=\(config.sampleRate, privacy: .public)")
 
         do {
             let selection = try await startProviderChain(selections, config: config)
@@ -88,6 +101,8 @@ final class RecognitionOrchestrator: ObservableObject {
             previewState.message = "按住说话，松开后会插入最终文本"
             isSessionActive = true
             isSessionRunning = true
+            isStartingSession = false
+            Self.logger.info("Provider ready. mode=\(selection.mode.title, privacy: .public)")
 
             try audioCaptureEngine.startCapture { [weak self] chunk in
                 guard let self else { return }
@@ -99,15 +114,20 @@ final class RecognitionOrchestrator: ObservableObject {
                     try await selection.provider.sendAudio(chunk)
                 } catch {
                     await MainActor.run {
+                        Self.logger.error("sendAudio failed: \(error.localizedDescription, privacy: .public)")
                         self.fail(message: "发送音频失败：\(error.localizedDescription)")
                     }
                 }
             }
+            Self.logger.info("Audio capture started")
 
             if isPendingStop {
+                Self.logger.info("Pending stop detected immediately after capture start")
                 await endCapture()
             }
         } catch {
+            Self.logger.error("beginCapture failed: \(error.localizedDescription, privacy: .public)")
+            isStartingSession = false
             fail(message: error.localizedDescription)
         }
     }
@@ -116,28 +136,47 @@ final class RecognitionOrchestrator: ObservableObject {
 
     func endCapture() async {
         guard let activeProvider else {
-            isPendingStop = true
+            if isStartingSession {
+                isPendingStop = true
+                Self.logger.info("endCapture requested before provider is ready; marking pending stop")
+            } else {
+                Self.logger.info("endCapture ignored because there is no active provider")
+            }
             return
         }
 
         guard isSessionActive else {
-            isPendingStop = true
+            Self.logger.info("endCapture ignored because session is not active")
+            return
+        }
+
+        guard !isFinishRequested else {
+            Self.logger.info("endCapture ignored because finish has already been requested")
             return
         }
 
         isPendingStop = false
+        isFinishRequested = true
         previewState.isRecording = false
         previewState.message = "正在处理最后的音频"
+        Self.logger.info("Ending capture; stopping audio after tail buffer delay")
 
         // 延迟停止音频捕获，确保最后的音频被处理
+        let finishingGeneration = sessionGeneration
         try? await Task.sleep(for: .milliseconds(300))
-        audioCaptureEngine.stopCapture()
+        guard isSessionActive, sessionGeneration == finishingGeneration else {
+            Self.logger.info("Skipping finishAudio because session ended or changed during tail delay. finishingGeneration=\(finishingGeneration, privacy: .public) currentGeneration=\(self.sessionGeneration, privacy: .public)")
+            return
+        }
+        stopAudioCapture(reason: "user requested endCapture")
 
         let hadTranscript = !finalTranscript.isEmpty || !previewState.transcript.isEmpty
 
         do {
             try await activeProvider.finishAudio()
+            Self.logger.info("finishAudio sent to provider")
         } catch {
+            Self.logger.error("finishAudio failed: \(error.localizedDescription, privacy: .public)")
             if hadTranscript {
                 fail(message: "结束识别时出错：\(friendlyErrorMessage(error))")
             } else {
@@ -146,15 +185,26 @@ final class RecognitionOrchestrator: ObservableObject {
             return
         }
 
+        guard isSessionActive, sessionGeneration == finishingGeneration else {
+            Self.logger.info("Skipping final-result timeout because session ended or changed during finishAudio. finishingGeneration=\(finishingGeneration, privacy: .public) currentGeneration=\(self.sessionGeneration, privacy: .public)")
+            return
+        }
+
         sessionTimeoutTask?.cancel()
+        let timeoutGeneration = finishingGeneration
         sessionTimeoutTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(5))
             guard !Task.isCancelled, self.isSessionActive else { return }
+            guard self.sessionGeneration == timeoutGeneration else {
+                Self.logger.info("Ignoring stale final-result timeout. timeoutGeneration=\(timeoutGeneration, privacy: .public) currentGeneration=\(self.sessionGeneration, privacy: .public)")
+                return
+            }
             Self.logger.warning("Session timed out waiting for final result, force ending")
             let transcript = self.previewState.transcript
             if !transcript.isEmpty, self.finalTranscript.isEmpty {
                 self.finalTranscript = self.smartPostProcessor.processRulesOnly(text: transcript)
                 if !self.finalTranscript.isEmpty {
+                    Self.logger.warning("Inserting fallback transcript after final-result timeout: \(self.finalTranscript, privacy: .public)")
                     let result = self.textInsertionService.insert(text: self.finalTranscript)
                     self.lastInsertionResult = result
                 }
@@ -234,9 +284,12 @@ final class RecognitionOrchestrator: ObservableObject {
             }
 
             if finalResult.isEmpty {
+                Self.logger.info("Final text is empty after post-processing; dismissing quietly")
                 dismissQuietly(message: "没有识别到有效内容")
                 return
             }
+
+            Self.logger.info("Final text pipeline. providerFinal=\(finalText, privacy: .public) basic=\(basicResult, privacy: .public) finalBeforeSmart=\(finalResult, privacy: .public)")
 
             let frontmostApp = NSWorkspace.shared.frontmostApplication
             let targetApp = frontmostApp?.localizedName
@@ -277,6 +330,7 @@ final class RecognitionOrchestrator: ObservableObject {
                         }
 
                         self.finalTranscript = processed.isEmpty ? textToProcess : processed
+                        Self.logger.info("LLM post-processing completed. insertedText=\(self.finalTranscript, privacy: .public)")
                         self.previewState.isPostProcessing = false
                         self.previewState.transcript = ""
                         self.previewState.hintMessage = nil
@@ -299,6 +353,7 @@ final class RecognitionOrchestrator: ObservableObject {
             } else {
                 let processed = smartPostProcessor.processRulesOnly(text: finalResult)
                 finalTranscript = processed.isEmpty ? finalResult : processed
+                Self.logger.info("Final text ready for insertion. insertedText=\(self.finalTranscript, privacy: .public)")
                 previewState.transcript = finalTranscript
                 insertFinalText()
             }
@@ -307,16 +362,20 @@ final class RecognitionOrchestrator: ObservableObject {
         case .sessionFailed(let failure):
             let currentTranscript = previewState.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
             let hadContent = !finalTranscript.isEmpty || !currentTranscript.isEmpty
+            Self.logger.error("Provider session failed. message=\(failure.message, privacy: .public) hadContent=\(hadContent, privacy: .public) finalAlreadyProduced=\(!self.finalTranscript.isEmpty, privacy: .public) currentTranscript=\(currentTranscript, privacy: .public)")
 
             if hadContent {
                 if !finalTranscript.isEmpty {
                     Self.logger.info("Ignoring provider failure after final transcript was already produced")
+                    finishSession(reason: "provider failure after final transcript")
                 } else if !currentTranscript.isEmpty {
                     Self.logger.info("Session failed but have partial results, attempting to use them as final")
+                    stopAudioCapture(reason: "provider failure with partial transcript")
                     finalTranscript = smartPostProcessor.processRulesOnly(text: currentTranscript)
                     previewState.transcript = finalTranscript
                     insertFinalText()
                     previewState.hintMessage = "识别未完成，已插入部分结果"
+                    finishSession(reason: "provider failure used partial transcript")
                 } else {
                     fail(message: friendlyErrorMessage(failure))
                 }
@@ -324,15 +383,20 @@ final class RecognitionOrchestrator: ObservableObject {
                 dismissQuietly(message: "说话时间太短，没有识别到内容")
             }
         case .sessionEnded:
-            finishSession()
+            finishSession(reason: "provider emitted sessionEnded")
         }
     }
 
-    private func finishSession() {
+    private func finishSession(reason: String) {
+        Self.logger.info("Finishing recognition session. reason=\(reason, privacy: .public)")
         sessionTimeoutTask?.cancel()
         sessionTimeoutTask = nil
         consumeEventsTask?.cancel()
         consumeEventsTask = nil
+        stopAudioCapture(reason: "finishSession: \(reason)")
+        isStartingSession = false
+        isPendingStop = false
+        isFinishRequested = false
         isSessionActive = false
         isSessionRunning = false
         activeProvider = nil
@@ -345,10 +409,15 @@ final class RecognitionOrchestrator: ObservableObject {
     }
 
     private func forceEndSession() {
+        Self.logger.warning("Force ending recognition session")
         sessionTimeoutTask?.cancel()
         sessionTimeoutTask = nil
         consumeEventsTask?.cancel()
         consumeEventsTask = nil
+        stopAudioCapture(reason: "forceEndSession")
+        isStartingSession = false
+        isPendingStop = false
+        isFinishRequested = false
         isSessionActive = false
         isSessionRunning = false
         activeProvider = nil
@@ -360,12 +429,15 @@ final class RecognitionOrchestrator: ObservableObject {
     @discardableResult
     private func insertFinalText() -> Bool {
         previewState.message = "正在插入到当前输入位置"
+        Self.logger.info("Inserting final text: \(self.finalTranscript, privacy: .public)")
         let result = textInsertionService.insert(text: finalTranscript)
         lastInsertionResult = result
         if result.succeeded {
+            Self.logger.info("Insertion succeeded. method=\(result.method.rawValue, privacy: .public) target=\(result.targetAppName ?? "unknown", privacy: .public)")
             previewState.message = "已插入到当前应用"
             return true
         } else {
+            Self.logger.error("Insertion failed. reason=\(result.failureReason ?? "unknown", privacy: .public)")
             previewState.errorMessage = result.failureReason
             lastErrorMessage = result.failureReason
             scheduleDismiss(delay: 3.0)
@@ -374,15 +446,19 @@ final class RecognitionOrchestrator: ObservableObject {
     }
 
     private func fail(message: String) {
+        Self.logger.error("Session failed: \(message, privacy: .public)")
         sessionTimeoutTask?.cancel()
         sessionTimeoutTask = nil
-        audioCaptureEngine.stopCapture()
+        stopAudioCapture(reason: "fail: \(message)")
         previewState.isVisible = true
         previewState.isRecording = false
         previewState.errorMessage = message
         previewState.title = "语音输入失败"
         previewState.message = ""
         lastErrorMessage = message
+        isStartingSession = false
+        isPendingStop = false
+        isFinishRequested = false
         isSessionActive = false
         isSessionRunning = false
         consumeEventsTask?.cancel()
@@ -392,18 +468,29 @@ final class RecognitionOrchestrator: ObservableObject {
     }
 
     private func dismissQuietly(message: String) {
+        Self.logger.info("Dismissing session quietly. message=\(message, privacy: .public)")
+        sessionTimeoutTask?.cancel()
+        sessionTimeoutTask = nil
         previewState.isRecording = false
         previewState.hintMessage = message
         previewState.transcript = ""
         previewState.errorMessage = nil
+        isStartingSession = false
+        isPendingStop = false
+        isFinishRequested = false
         isSessionActive = false
         isSessionRunning = false
         consumeEventsTask?.cancel()
         consumeEventsTask = nil
-        audioCaptureEngine.stopCapture()
+        stopAudioCapture(reason: "dismissQuietly: \(message)")
         activeProvider = nil
 
         scheduleDismiss(delay: 1.2)
+    }
+
+    private func stopAudioCapture(reason: String) {
+        Self.logger.info("Stopping audio capture. reason=\(reason, privacy: .public)")
+        audioCaptureEngine.stopCapture()
     }
 
     private func scheduleDismiss(delay: Double) {

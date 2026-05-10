@@ -52,7 +52,7 @@ enum TextTransform: Codable, Equatable, Identifiable {
         switch self {
         case .removePunctuation: "移除所有标点"
         case .replacePunctuation(let r): "标点替换为「\(r)」"
-        case .removeTrailingPunctuation: "去句尾标点"
+        case .removeTrailingPunctuation: "去句尾句号"
         case .addTrailingPunctuation(let m): "加句尾「\(m)」"
         case .collapseWhitespace: "合并连续空格"
         case .trimWhitespace: "去首尾空格"
@@ -76,8 +76,7 @@ enum TextTransform: Codable, Equatable, Identifiable {
             )
         case .removeTrailingPunctuation:
             var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            while let last = result.unicodeScalars.last,
-                  CharacterSet.punctuationCharacters.union(.symbols).contains(last) {
+            while let last = result.last, Self.trailingPeriodMarks.contains(last) {
                 result = String(result.dropLast())
             }
             return result
@@ -97,6 +96,8 @@ enum TextTransform: Codable, Equatable, Identifiable {
             return text.replacingOccurrences(of: pattern, with: replacement, options: .regularExpression)
         }
     }
+
+    private static let trailingPeriodMarks: Set<Character> = ["。", ".", "．", "｡"]
 }
 
 struct PostProcessingConfig: Codable {

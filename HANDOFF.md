@@ -2,7 +2,214 @@
 
 This file is the first-stop handoff note for switching between Codex, Claude Code, Xcode, and other development tools.
 
+## Recent Fixes - 2026-05-10
+
+### 长按说话提前中断与 GuGuTalk 内输入限制（本地已实现，待用户实测确认）
+
+**用户反馈：**
+- 按住说话时，用户还没有松开热键，录制却会自己停掉；托盘/系统看起来麦克风仍被占用。
+- 需要“实锤”豆包最终返回是否自带停顿空格，不能只靠猜测。
+- GuGuTalk 自己的设置页里也应该允许语音输入，例如用户编辑 Prompt 或服务参数时。
+
+**本轮定位：**
+1. `RecognitionOrchestrator` 在 provider 中途失败且已有 partial 的路径，会把 partial 当作最终结果插入，但旧代码没有在该路径统一停止 `AudioCaptureEngine`，可能造成“会话结束但麦克风仍占用”的状态错位。
+2. `VoiceInputAppModel.updateHotkeyMonitoring()` 每次权限刷新都会调用 `hotkeyManager.start()`；旧 `start()` 内部会先 `stop()`，在按住期间可能重置热键状态。现在 `start()` 对已启动的 event tap 幂等，不再重建。
+3. `TextInsertionService` 旧逻辑只要发现前台应用是 GuGuTalk 就直接拒绝插入，这个保护过粗，会误伤设置页里的 Prompt / API 参数输入框。
+4. `AppSettings.recognitionConfig` 旧端点策略是 `.voiceActivityDetection`，与当前产品交互“用户松开/再次按下才结束”不一致。
+
+**本轮修复：**
+- 热键监听：
+  - `HotkeyManager.start()` 改成幂等；权限刷新不会反复 stop/start event tap。
+  - 热键 press/release、modifier press/release、event tap 被系统禁用重启都增加日志。
+  - 快捷键录制仍通过 `suspendHotkeys()` 暂停全局热键，录制结束恢复；不再需要禁用整个 GuGuTalk 应用内语音输入。
+- 会话收尾：
+  - `finishSession(reason:)`、`forceEndSession()`、provider failure with partial 等所有终止路径统一调用 `stopAudioCapture(reason:)`。
+  - provider failure、最终文本管线、插入结果均增加日志，便于判断是热键释放、provider 断开、final 超时还是插入失败。
+- 识别端点：
+  - `RecognitionConfig.endpointing` 改为 `.manual`，让按住说话/按一下开始停止都由用户动作决定收尾，而不是由服务端 VAD 根据停顿提前结束。
+- GuGuTalk 内输入：
+  - 移除“前台是 GuGuTalk 就拒绝”的一刀切逻辑。
+  - 新逻辑：如果前台是 GuGuTalk，只有当前焦点不是文本输入控件时才拒绝；Prompt、配置输入框等可编辑控件可以正常用语音输入。
+- 豆包 raw 证据：
+  - Doubao provider 现在在 terminal / finish 相关事件以及 raw 被 normalizer 改动时输出 `raw` 和 `normalized` 对照日志。
+  - raw 日志保留换行/制表符的可见转义，不再只做 Debug-only，也不再只在 Debug 构建可见。
+
+**验证：**
+- Debug `xcodebuild` passed。
+- Release `xcodebuild` passed。
+- `swift test` passed：16 tests。
+- Latest Release app launched from `/tmp/DesktopVoiceInputReleaseDerivedData/Build/Products/Release/DesktopVoiceInput.app`，PID `3443`。
+
+**下一步实测建议：**
+- 用豆包模式按住说一段中间有明显停顿的长句，观察是否还会未松手提前结束。
+- 如还有问题，查看 Console 或 Xcode 日志中 `HotkeyManager`、`RecognitionOrchestrator`、`DoubaoSpeechProvider` 三类日志即可定位：热键 release 是否真的发生、provider 是否提前失败、豆包 final raw 是否带空格。
+
 ## Recent Fixes - 2026-05-09
+
+### 录音气泡一致性与豆包中文空格清理（2026-05-10，本地已实现，待用户体验确认）
+
+**用户反馈：**
+- 等待识别的波形气泡和识别中的文本气泡颜色不一致。
+- 气泡圆角外还有隐约的方框/背景。
+- 豆包最终上屏结果里会在停顿处分出额外空格，例如“过程中 就 会有空格”。
+
+**本轮调整：**
+1. 录音 overlay 正常状态统一使用同一图标 aqua 主题底色；空文本波形和识别文本不再使用两套颜色。
+2. `NSHostingView` 显式设为透明 layer，overlay 去掉外层投影并 clip 到统一形状，降低圆角外出现方形背景的概率。
+3. 新增 `TranscriptTextNormalizer.normalizeSpeechText`，移除中文汉字之间、中文标点附近的空格，但保留英文词间空格，例如 `OpenAI Cloud`。
+4. 豆包 provider 在入口处使用同一 normalizer，所以 partial、final、最终上屏前都会走一致的中文空格清理。
+5. Debug 构建下新增豆包 raw/normalized 对比日志：当服务端原文和应用使用文本不一致时，会输出 `raw=... normalized=...`，便于确认空格是否来自服务端返回。
+6. 补充测试用例覆盖中文停顿空格清理、英文空格保留、豆包 raw/canonical 对比。
+
+**验证：**
+- Debug `xcodebuild` passed。
+- `xcodebuild test` 不能执行：当前 scheme 未配置 test action。
+- 临时 Swift 脚本验证：`在这个停顿的过程中 就 会有空格` -> `在这个停顿的过程中就会有空格`；`打开 OpenAI Cloud 控制台` 保持英文词间空格。
+- Debug app 已从 `/tmp/DesktopVoiceInputDerivedData/Build/Products/Debug/DesktopVoiceInput.app` 重启。
+
+### 句尾标点规则修正（2026-05-10，本地已实现，待用户体验确认）
+
+**用户反馈：**
+- 豆包最终结果里问句有问号，但最终上屏后问号没了。
+
+**定位：**
+- 当前用户设置 `punctuationMode = removeTrailing`。
+- UI 文案是“去掉句尾句号”，但 `TextTransform.removeTrailingPunctuation` 旧实现会移除句尾所有 punctuation/symbol，包括 `？` 和 `！`。
+
+**修复：**
+- `removeTrailingPunctuation` 现在只移除句尾句号类字符：`。`、`.`、`．`、`｡`。
+- 问号和感叹号会保留。
+- 测试已同步更新，覆盖“真的吗？！”保留，以及“今天先这样。。”去掉句尾句号。
+
+### UI 重建设计方向：Aqua Chick Companion（2026-05-10，本地已实现，待用户体验确认）
+
+**用户反馈：**
+- 上一版仍然太丑、太粗糙，气泡有灰色/半透明玻璃感，配色缺少品牌记忆点。
+- 希望不用 `impeccable`，改用项目内 `frontend-design` 思路重新设计。
+- 目标：精致、轻快、有一点品牌感，但不花哨；不全靠灰色和系统蓝；不要霓虹、发光、赛博感。
+
+**本轮设计方向：**
+- 新视觉北极星：`Aqua Chick Companion`。
+- 主题色从 App 图标提取：清透青蓝作为主色，嘴/脚的暖橙只做少量强调。
+- 保留系统字体和 Mac 桌面工具的克制感，但不再依赖系统灰、系统蓝和原生开关。
+- 录音气泡改为实体浮层，不使用半透明玻璃拟态，也不保留粗糙外框。
+
+**本轮代码调整：**
+1. `DVITheme` 重建为图标青蓝主题，并新增统一的 `DVIChoiceBar`、`DVISwitch`、`DVIAppIcon`。
+2. 输入气泡关掉 NSPanel 自带阴影，去掉额外留白和正常状态线框，避免出现异常外框。
+3. 菜单栏控制台重做为迷你控制台：真实 App 图标、状态卡、识别模式切换、缺权限提示、设置/退出操作。
+4. 设置页重做层级：左侧为输入/整理/权限，输入页只保留识别引擎、云端配置、触发方式、外观；本地模式不显示无意义配置说明。
+5. 系统 Toggle / Picker / bordered button 已从当前 SwiftUI 页面移除，改为自定义精致控件。
+6. 权限引导卡片同步调整为同一视觉语言。
+7. `DESIGN.md` 已更新为新的图标主题设计系统，避免后续工具按旧的系统蓝灰或玉绿方向继续改。
+
+**验证：**
+- `swift test` passed: 12 tests
+- Debug `xcodebuild` passed
+- Release `xcodebuild` passed
+- Release app launched from `/tmp/DesktopVoiceInputReleaseDerivedData/Build/Products/Release/DesktopVoiceInput.app`
+- Debug app direct launch仍受 Xcode debug dylib 本地签名限制影响，建议真实体验继续使用 Release build。
+
+### 豆包流式重复字修复：按官方 utterances 语义重接（已实现，待真实长句验证）
+
+**问题描述：**
+- 用户在豆包模式下仍遇到明显重复字，例如“整整个应用的颜色”“有有重复”。
+- 这类重复更像客户端把旧 partial、当前 partial、二遍识别 final 的边界处理错了，而不是单纯 ASR 识别质量问题。
+
+**官方文档核对：**
+- `result_type` 默认为 `full`，代表全量返回。
+- 设置 `result_type = "single"` 时，返回增量结果，不返回之前分句。
+- `show_utterances = true` 后，`utterances[].definite` 才能标记一个分句是否已经确定。
+- `enable_nonstream = true` 会开启流式 + 非流式二遍识别，最终准确性依赖确定分句语义，客户端不能只盲拼 `result.text`。
+
+**本轮修复：**
+1. 豆包请求改为 `show_utterances: true`、`result_type: "single"`，不再只吃整段 `result.text`。
+2. 新增 `DoubaoTranscriptAssembler`：
+   - `definite=true` 的 utterance 进入已确认文本。
+   - `definite=false` 的 utterance 只作为当前临时预览段，后续 partial 到来时替换，不追加。
+   - 已确认文本和临时文本的边界做重叠合并，避免“有 + 有一个”变成“有有一个”。
+3. `DoubaoTranscriptPayload` 同时兼容 `result` 为对象和列表两种结构，避免官方字段描述与示例结构差异导致解析脆弱。
+4. 增加 4 个豆包解析/组装测试，覆盖 utterances 解析、全量式已确认文本去重、边界重叠合并、active partial 替换而非追加。
+
+**验证：**
+- `swift test` passed: 12 tests
+- Debug `xcodebuild` passed
+- Release `xcodebuild` passed
+- Latest Release build installed and launched at `/Applications/GuGuTalk.app`
+
+**2026-05-10 复审更新：**
+- 用户指出这个接口本身应负责流式结果刷新，客户端不应过度组装。
+- 复审后采用更简单的官方语义：`result_type = "full"`，每次收到结果都直接以服务端完整 `result.text` 替换当前预览和 latest final。
+- `show_utterances = true` 保留用于调试和兜底解析，但不再用本地 assembler 拼接分句。
+- `result` 兼容 object 和 list；优先使用服务端 `text`，只有没有 `text` 时才按 utterances 时间顺序兜底。
+- 这样避免客户端自己制造 “旧 partial + 新 partial” 的重复字。
+- 本次复审后：`swift test` passed 12 tests；Debug/Release `xcodebuild` passed；最新版已安装到 `/Applications/GuGuTalk.app`。
+
+### 设计风格重建：Porcelain Lake（已实现，待用户体验确认）
+
+**本轮目标：**
+- 用户明确反馈上一版仍然太丑：输入气泡灰、不规则玻璃感明显、配色没有品牌感，设置页和托盘也缺少统一设计判断。
+- 这轮不再继续微调旧视觉，而是重建一套更有识别度的产品 UI：清爽但不寡淡，精致但不花哨，仍保留 macOS 系统字体和桌面工具的克制感。
+
+**设计方向：**
+- 视觉关键词：瓷感、湖蓝、安静、轻快、克制。
+- 不使用装饰性玻璃拟态，不使用灰色临时浮层，不做网页后台式卡片堆砌。
+- 主色从系统蓝灰改为湖蓝/青绿色系；状态色保持明确：湖蓝表示当前选择，薄荷绿表示就绪，珊瑚红表示错误。
+
+**本轮调整：**
+1. `DVITheme` 重建色彩和形状 token：统一窗口、侧栏、面板、控件、浮层、选中态、状态色。
+2. 输入气泡移除不规则半透明玻璃背景，改为实体瓷感 HUD；短状态更轻，识别内容展开时最多三行，仍保留最新内容并从开头省略。
+3. 识别波形在无文本时作为主状态，在有文本后退到背景信号，不再占据一块生硬空间。
+4. 菜单栏控制台改成更紧凑的状态面板：状态、模式、权限提醒、设置入口和退出入口，减少无效“已就绪”信息堆砌。
+5. 设置页重建侧栏品牌区、页面标题、分组面板、快捷键按钮和 provider 状态芯片；快捷键区域使用开关加“更改”按钮，信息更直接。
+6. 后处理页、权限页实机切换检查过，当前视觉语言与常用页保持一致。
+
+**验证：**
+- `swift test` passed: 8 tests
+- Debug `xcodebuild` passed
+- Release `xcodebuild` passed
+- Latest build installed and launched at `/Applications/GuGuTalk.app`
+- Used Computer Use to inspect the live Settings window across Common, Post-processing, and Permissions pages.
+
+### 设计风格试验：Polished Mac Companion（已实现，待用户体验确认）
+
+**本轮目标：**
+- 用户明确反馈上一版太素，且输入状态圆角矩形气泡缺乏审美。
+- 设计方向从“尽量原生”调整为“精致的 Mac 第三方工具”：保留系统字体和原生控件，同时增加轻盈层次、清爽主色和更漂亮的输入浮层。
+
+**本轮调整：**
+1. 输入气泡从硬圆角卡片改为轻浮岛 HUD：短状态更小，录音时更像临时系统浮层，展开后保持柔和形态。
+2. 识别文本最多展示三行，继续遵守“保留最新内容，省略最早内容”的规则。
+3. 波形在有文字时弱化为背景信号，不再像独立占位组件。
+4. 设置页减少重复状态信息，删掉侧栏底部状态条，让状态只在相关位置出现。
+5. 快捷键文案压缩为“松开后插入”“再次按下结束”，并给快捷键按钮增加可编辑暗示。
+6. 外观设置重新放回统一面板，避免裸露控件破坏节奏。
+7. 主题色从生硬系统蓝灰调整为更清爽的湖蓝/青绿色系，深浅色都保留克制感。
+
+**验证：**
+- `swift test` passed: 8 tests
+- Debug `xcodebuild` passed
+- Release `xcodebuild` passed
+- Latest build installed and launched at `/Applications/GuGuTalk.app`
+
+### UI 信息层级与视觉语言精修（已实现，待用户体验确认）
+
+**本轮目标：**
+- 按照 `PRODUCT.md`、`DESIGN.md` 和 impeccable 设计标准重新审视设置页、菜单栏控制台、输入气泡。
+- 方向是更接近 native macOS：克制、清晰、紧凑、有质感，避免网页后台感、花哨 AI 工具感，以及圆形/胶囊/圆角矩形混用导致的杂乱感。
+
+**本轮调整：**
+1. 菜单栏控制台改为紧凑状态头：状态标记、当前状态、快捷键提示、识别模式切换、缺权限时才显示处理提示。
+2. 设置页快捷键区域从两张大卡片改为一个分组面板内的两行设置，使用原生开关和更少说明文字，降低视觉噪音。
+3. 输入气泡外形从胶囊改为统一的连续圆角面板，背景材质更稳，避免小气泡/大气泡和设置页组件形状语言割裂。
+4. 状态颜色统一走 `DVITheme`，减少硬编码红/蓝/橙/白，选中态和提示态更一致。
+5. 快捷键录制冲突提示、警告提示统一为轻量状态条，避免橙色大段提醒破坏设置页平衡。
+
+**验证：**
+- `swift test` passed: 8 tests
+- Debug `xcodebuild` passed
+- Release `xcodebuild` passed
+- Latest build installed and launched at `/Applications/GuGuTalk.app`
 
 ### 结束阶段误报“识别未完成，已插入部分结果”（已修复，待真实长句验证）
 
@@ -77,15 +284,15 @@ This file is the first-stop handoff note for switching between Codex, Claude Cod
 - Stable tag: `stable-2026-05-01`
 - Stable commit: `960f2b3`
 - GitHub repository: `https://github.com/HawkkZhang/GuGuSpeak`
-- Latest pushed checkpoint on `main`: `5521384 记录豆包流式修复和启动入口方案`
+- Latest pushed checkpoint on `main`: `64107b2 修复识别收尾和 AI 后处理气泡`
 - Local branch at time of writing: `main`
 - Remote branch: `origin/main`
 
 If local work gets messy, use the stable tag as the known-good restore point.
 
-## Latest Synced State - 2026-05-08
+## Latest Synced State - 2026-05-09
 
-The current handoff state has been pushed to GitHub on `main` at commit `5521384`.
+The latest pushed code checkpoint on `main` is commit `64107b2`.
 
 Implemented and locally tested:
 
@@ -168,11 +375,20 @@ The most recent UI direction is:
 - compact overlay with waveform only before text, then waveform embedded quietly behind transcript text
 - newest transcript content should remain visible, with a single leading ellipsis when older text is omitted
 
+Latest local fix:
+
+- Hold-to-talk cutoff was traced to a stale final-result timeout task, not to a real hotkey release.
+- `RecognitionOrchestrator` now scopes final timeout tasks by `sessionGeneration`, cancels old timeouts at session start/end, and ignores duplicate `endCapture()` calls after finishing has begun.
+- Lifecycle expectation is: starting can accept a pending stop, recording streams audio, finishing sends `finishAudio()` once, idle clears all pending stop / finish / timeout state.
+- System hint bubbles now use the same aqua overlay surface as recording; only prompt text style changes.
+- Verified locally on 2026-05-10: Debug build passed, Release build passed, `swift test` passed 16 tests, latest Release app launched from `/tmp/DesktopVoiceInputReleaseDerivedData/Build/Products/Release/DesktopVoiceInput.app` with PID `11291`.
+
 ## Known Risks
 
 - Settings/onboarding architecture is currently in transition. SwiftUI's `Settings` scene is awkward for "open the app and show the main window" behavior because `openSettings()` is only available from SwiftUI environment. Prefer a dedicated app window for the next implementation pass.
 - The locally signed `/Applications/GuGuTalk.app` is for development testing. It may still be blocked by Gatekeeper when double-clicked because the certificate is self-signed; launching via `/Applications/GuGuTalk.app/Contents/MacOS/DesktopVoiceInput` is currently the most reliable local test path.
 - Do not assume hotkeys are fully stable. Dual hotkey mode still needs testing and polish.
+- If hold-to-talk is still cut off, inspect logs for `HotkeyManager` release events versus `RecognitionOrchestrator` timeout/provider events. A cutoff without release should now show whether it is provider failure, sendAudio failure, or a new lifecycle bug.
 - Do not let shortcut recording trigger live voice input.
 - Do not let recognized text insert into the app's own settings or internal UI.
 - Treat text insertion compatibility as a top-priority product risk. Browser and web rich-text editors can expose placeholder / hint text through Accessibility APIs, so direct AX read-modify-write can accidentally merge hint text into the dictated result. Prefer paste-style insertion for browsers / web editors, keep Accessibility insertion for safe native controls, and build toward per-app strategy memory plus full pasteboard restoration.
@@ -200,11 +416,11 @@ Use this when opening Claude Code or another coding agent:
 ```text
 Please first read PRODUCT.md, DESIGN.md, MEMORY.md, HANDOFF.md, README.md, and the latest git log.
 This is a macOS SwiftUI/AppKit voice input app named GuGuSpeak / DesktopVoiceInput.
-Continue from main at or after commit 5521384.
+Continue from main at or after commit 64107b2.
 Start by replacing the current SwiftUI Settings scene entry flow with a dedicated native settings/onboarding window for GuGuTalk.
 Route Finder/Launchpad app open, app reopen, menu bar Settings, and permission guidance into the same window.
 If permissions are missing, open that window to Permissions; otherwise open General/Home.
-Preserve the Doubao utterances[].definite streaming handling from 5521384 unless real logs prove it wrong.
+Preserve the Doubao utterances[].definite streaming handling unless real logs prove it wrong.
 Do not overwrite uncommitted changes if any exist in the local checkout.
 Respect the native macOS design direction and the known risks in HANDOFF.md.
 Before editing, inspect the relevant files and summarize the intended change.

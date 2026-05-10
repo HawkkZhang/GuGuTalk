@@ -64,7 +64,7 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
                 if self.hasRequestedFinish, !self.hasEmittedFinalResult {
                     let finalText = self.latestTranscript
                     if !finalText.isEmpty {
-                        Self.logger.debug("Emitting fallback final transcript on disconnect: \(finalText, privacy: .public)")
+                        Self.logger.info("Emitting fallback final transcript on disconnect: \(finalText, privacy: .public)")
                         self.hasEmittedFinalResult = true
                         self.continuation.yield(.finalTextReady(text: finalText))
                     }
@@ -109,7 +109,7 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
             request: .init(
                 modelName: "bigmodel",
                 enableNonstream: true,
-                showUtterances: false,
+                showUtterances: true,
                 resultType: "full",
                 enableITN: true,
                 enableDDC: false,
@@ -188,10 +188,11 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
             return
         }
 
-        if let result = json["result"] as? [String: Any], let transcript = DoubaoTranscriptPayload(resultObject: result), !transcript.text.isEmpty {
-            latestTranscript = transcript.text
+        if let transcript = DoubaoTranscriptPayload(resultValue: json["result"]), transcript.hasText {
+            latestTranscript = transcript.canonicalText
             revision += 1
-            Self.logger.debug("Received JSON transcript. finishRequested=\(self.hasRequestedFinish, privacy: .public) text=\(self.latestTranscript, privacy: .public)")
+            logTranscriptSnapshot(transcript, stage: "json", isTerminal: false)
+            Self.logger.debug("Received JSON transcript. utterances=\(transcript.utterances.count, privacy: .public) definite=\(transcript.definiteCount, privacy: .public) finishRequested=\(self.hasRequestedFinish, privacy: .public) text=\(self.latestTranscript, privacy: .public)")
             continuation.yield(.partialTextUpdated(text: latestTranscript, revision: revision))
             return
         }
@@ -216,30 +217,51 @@ final class DoubaoSpeechProvider: NSObject, SpeechProvider, @unchecked Sendable 
             return
         }
 
-        guard let transcript = response.transcript, !transcript.text.isEmpty else {
+        guard let transcript = response.transcript, transcript.hasText else {
             if response.isTerminal, hasRequestedFinish, !hasEmittedFinalResult {
                 hasEmittedFinalResult = true
+                Self.logger.info("Received terminal frame without transcript; emitting latest transcript as final: \(self.latestTranscript, privacy: .public)")
                 continuation.yield(.finalTextReady(text: latestTranscript))
                 emitSessionEndedIfNeeded()
             }
             return
         }
 
-        latestTranscript = transcript.text
+        latestTranscript = transcript.canonicalText
         revision += 1
+        logTranscriptSnapshot(transcript, stage: response.isTerminal ? "terminal" : "partial", isTerminal: response.isTerminal)
 
         if response.isTerminal {
-            Self.logger.debug("Received terminal transcript. finishRequested=\(self.hasRequestedFinish, privacy: .public) text=\(self.latestTranscript, privacy: .public)")
+            Self.logger.debug("Received terminal transcript. utterances=\(transcript.utterances.count, privacy: .public) definite=\(transcript.definiteCount, privacy: .public) finishRequested=\(self.hasRequestedFinish, privacy: .public) text=\(self.latestTranscript, privacy: .public)")
             if hasRequestedFinish {
                 hasEmittedFinalResult = true
+                Self.logger.info("Doubao final emitted. text=\(self.latestTranscript, privacy: .public)")
                 continuation.yield(.finalTextReady(text: latestTranscript))
                 emitSessionEndedIfNeeded()
             } else {
                 continuation.yield(.partialTextUpdated(text: latestTranscript, revision: revision))
             }
         } else {
-            Self.logger.debug("Received partial transcript. text=\(self.latestTranscript, privacy: .public)")
+            Self.logger.debug("Received partial transcript. utterances=\(transcript.utterances.count, privacy: .public) definite=\(transcript.definiteCount, privacy: .public) text=\(self.latestTranscript, privacy: .public)")
             continuation.yield(.partialTextUpdated(text: latestTranscript, revision: revision))
+        }
+    }
+
+    private func logTranscriptSnapshot(_ transcript: DoubaoTranscriptPayload, stage: String, isTerminal: Bool) {
+        let rawText = transcript.rawCanonicalText
+        let normalizedText = transcript.canonicalText
+        let changedByNormalizer = rawText != normalizedText
+        let rawForLog = rawText.escapedForDiagnosticLog
+        let normalizedForLog = normalizedText.escapedForDiagnosticLog
+
+        if isTerminal || hasRequestedFinish || changedByNormalizer {
+            Self.logger.info(
+                "Doubao transcript snapshot. stage=\(stage, privacy: .public) terminal=\(isTerminal, privacy: .public) finishRequested=\(self.hasRequestedFinish, privacy: .public) changedByNormalizer=\(changedByNormalizer, privacy: .public) raw=\"\(rawForLog, privacy: .public)\" normalized=\"\(normalizedForLog, privacy: .public)\" utterances=\(transcript.utterances.count, privacy: .public) definite=\(transcript.definiteCount, privacy: .public)"
+            )
+        } else {
+            Self.logger.debug(
+                "Doubao transcript snapshot. stage=\(stage, privacy: .public) terminal=\(isTerminal, privacy: .public) finishRequested=\(self.hasRequestedFinish, privacy: .public) changedByNormalizer=\(changedByNormalizer, privacy: .public) raw=\"\(rawForLog, privacy: .public)\" normalized=\"\(normalizedForLog, privacy: .public)\" utterances=\(transcript.utterances.count, privacy: .public) definite=\(transcript.definiteCount, privacy: .public)"
+            )
         }
     }
 
@@ -357,10 +379,9 @@ private enum DoubaoFrameParser {
             return DoubaoParsedResponse(transcript: nil, isTerminal: true, errorMessage: message ?? "请求失败", transportError: nil)
         }
 
-        let resultObject = json["result"] as? [String: Any]
         let isTerminal = messageFlags == 0b0011
         return DoubaoParsedResponse(
-            transcript: resultObject.flatMap(DoubaoTranscriptPayload.init(resultObject:)),
+            transcript: DoubaoTranscriptPayload(resultValue: json["result"]),
             isTerminal: isTerminal,
             errorMessage: nil,
             transportError: nil
@@ -394,13 +415,134 @@ private enum DoubaoFrameParser {
 }
 
 struct DoubaoTranscriptPayload {
-    let text: String
+    let text: String?
+    let rawText: String?
+    let utterances: [DoubaoUtterance]
+
+    var hasText: Bool {
+        if let text, !text.isEmpty { return true }
+        return utterances.contains { !$0.text.isEmpty }
+    }
+
+    var definiteCount: Int {
+        utterances.filter(\.isDefinite).count
+    }
+
+    var canonicalText: String {
+        if let text, !text.isEmpty {
+            return text
+        }
+
+        return utterances
+            .sorted(by: DoubaoUtterance.sortByTime)
+            .map(\.text)
+            .joined()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var rawCanonicalText: String {
+        if let rawText, !rawText.isEmpty {
+            return rawText
+        }
+
+        return utterances
+            .sorted(by: DoubaoUtterance.sortByTime)
+            .map(\.rawText)
+            .joined()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    init?(resultValue: Any?) {
+        if let resultObject = resultValue as? [String: Any] {
+            self.init(resultObjects: [resultObject])
+        } else if let resultObjects = resultValue as? [[String: Any]] {
+            self.init(resultObjects: resultObjects)
+        } else {
+            return nil
+        }
+    }
 
     init?(resultObject: [String: Any]) {
-        let rawText = (resultObject["text"] as? String)?
+        self.init(resultObjects: [resultObject])
+    }
+
+    private init?(resultObjects: [[String: Any]]) {
+        let rawText = resultObjects
+            .compactMap { $0["text"] as? String }
+            .map(Self.trimRawText)
+            .filter { !$0.isEmpty }
+            .joined()
+
+        let normalizedText = resultObjects
+            .compactMap { $0["text"] as? String }
+            .map(Self.sanitize)
+            .filter { !$0.isEmpty }
+            .joined()
+
+        let utterances = resultObjects
+            .flatMap { ($0["utterances"] as? [[String: Any]]) ?? [] }
+            .compactMap(DoubaoUtterance.init(rawValue:))
+
+        self.text = normalizedText.isEmpty ? nil : normalizedText
+        self.rawText = rawText.isEmpty ? nil : rawText
+        self.utterances = utterances
+
+        guard hasText else { return nil }
+    }
+
+    private static func sanitize(_ text: String) -> String {
+        TranscriptTextNormalizer.normalizeSpeechText(text)
+    }
+
+    private static func trimRawText(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+struct DoubaoUtterance {
+    let text: String
+    let rawText: String
+    let startTime: Int?
+    let endTime: Int?
+    let isDefinite: Bool
+
+    var hasTiming: Bool {
+        startTime != nil && endTime != nil
+    }
+
+    init?(rawValue: [String: Any]) {
+        let rawText = (rawValue["text"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !rawText.isEmpty else { return nil }
-        self.text = rawText
+        let text = TranscriptTextNormalizer.normalizeSpeechText(rawText)
+        guard !text.isEmpty else { return nil }
+
+        self.text = text
+        self.rawText = rawText
+        self.startTime = rawValue["start_time"] as? Int
+        self.endTime = rawValue["end_time"] as? Int
+        self.isDefinite = (rawValue["definite"] as? Bool) == true
+    }
+
+    static func sortByTime(lhs: DoubaoUtterance, rhs: DoubaoUtterance) -> Bool {
+        switch (lhs.startTime, rhs.startTime) {
+        case let (left?, right?) where left != right:
+            return left < right
+        case (_?, nil):
+            return true
+        case (nil, _?):
+            return false
+        default:
+            return (lhs.endTime ?? 0) < (rhs.endTime ?? 0)
+        }
+    }
+}
+
+private extension String {
+    var escapedForDiagnosticLog: String {
+        replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\r", with: "\\r")
+            .replacingOccurrences(of: "\t", with: "\\t")
     }
 }
 

@@ -28,14 +28,18 @@ final class PreviewOverlayController {
         panel.level = .statusBar
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = true
+        panel.hasShadow = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.hidesOnDeactivate = false
         panel.isMovableByWindowBackground = false
-        panel.contentView = NSHostingView(
+        let hostingView = NSHostingView(
             rootView: PreviewOverlayView(previewState: previewState, settings: settings)
                 .preferredColorScheme(settings.appearancePreference.colorScheme)
         )
+        hostingView.wantsLayer = true
+        hostingView.layer?.backgroundColor = NSColor.clear.cgColor
+        hostingView.layer?.isOpaque = false
+        panel.contentView = hostingView
     }
 
     private func bind() {
@@ -104,40 +108,41 @@ final class PreviewOverlayController {
 
     private static func panelSize(for state: PreviewState) -> NSSize {
         if state.errorMessage != nil {
-            return NSSize(width: 300, height: 88)
+            return NSSize(width: 292, height: 58)
         }
 
         if state.hintMessage != nil {
-            return NSSize(width: 240, height: 54)
+            return NSSize(width: 198, height: 38)
         }
 
         if state.isPostProcessing {
-            return NSSize(width: 172, height: 54)
+            return NSSize(width: 140, height: 42)
         }
 
         let metrics = TranscriptLayoutMetrics(text: state.transcript)
         if metrics.trimmedText.isEmpty {
-            return NSSize(width: 172, height: 54)
+            return NSSize(width: 126, height: 40)
         }
 
         let charCount = metrics.trimmedText.count
-        let avgCharWidth: CGFloat = 11.5
+        let avgCharWidth: CGFloat = 10.6
         let estimatedTextWidth = CGFloat(charCount) * avgCharWidth
-        let padding: CGFloat = 70
+        let padding: CGFloat = 58
         let desiredWidth = estimatedTextWidth + padding
 
-        let minWidth: CGFloat = 200
+        let minWidth: CGFloat = 220
         let maxWidthForLines: CGFloat
         switch metrics.lineCount {
-        case 1: maxWidthForLines = 420
-        default: maxWidthForLines = 480
+        case 1: maxWidthForLines = 360
+        default: maxWidthForLines = 430
         }
         let width = min(max(desiredWidth, minWidth), maxWidthForLines)
 
         let height: CGFloat
         switch metrics.lineCount {
-        case 1: height = 74
-        default: height = 102
+        case 1: height = 60
+        case 2: height = 82
+        default: height = 104
         }
 
         return NSSize(width: width, height: height)
@@ -148,47 +153,61 @@ private struct PreviewOverlayView: View {
     @ObservedObject var previewState: PreviewState
     @ObservedObject var settings: AppSettings
 
-    private let primaryText = DVITheme.ink
     private let ready = DVITheme.ready
     private let danger = DVITheme.danger
     private var transcriptMetrics: TranscriptLayoutMetrics {
         TranscriptLayoutMetrics(text: previewState.transcript)
+    }
+    private var isCompactIsland: Bool {
+        previewState.errorMessage != nil ||
+            previewState.isPostProcessing ||
+            previewState.hintMessage != nil ||
+            transcriptMetrics.trimmedText.isEmpty
+    }
+    private var overlayFill: Color {
+        return DVITheme.overlayActive
+    }
+    private var overlayStroke: Color {
+        return Color.clear
     }
 
     var body: some View {
         VStack(alignment: .center, spacing: 0) {
             if let errorMessage = previewState.errorMessage {
                 Text(errorMessage)
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(danger)
                     .multilineTextAlignment(.center)
-                    .lineLimit(3)
+                    .lineLimit(2)
                     .truncationMode(.tail)
-                    .fixedSize(horizontal: false, vertical: true)
             } else if previewState.isPostProcessing {
                 postProcessingIndicator
             } else if let hintMessage = previewState.hintMessage {
-                Text(hintMessage)
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(DVITheme.secondaryInk)
+                Text(compactHintText(for: hintMessage))
+                    .font(.system(size: 12.5, weight: .regular))
+                    .foregroundStyle(DVITheme.selectedInk.opacity(0.72))
                     .multilineTextAlignment(.center)
-                    .lineLimit(2)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             } else if transcriptMetrics.trimmedText.isEmpty {
                 waveform
             } else {
                 transcriptContent
             }
         }
-        .padding(.horizontal, (previewState.isPostProcessing || transcriptMetrics.trimmedText.isEmpty) ? 12 : 14)
-        .padding(.vertical, (previewState.isPostProcessing || transcriptMetrics.trimmedText.isEmpty) ? 9 : 10)
+        .padding(.horizontal, isCompactIsland ? 13 : 18)
+        .padding(.vertical, isCompactIsland ? 8 : 11)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .background(.ultraThinMaterial, in: Capsule(style: .continuous))
-        .overlay(
-            Capsule(style: .continuous)
-                .stroke(DVITheme.separator.opacity(0.10), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.07), radius: 14, x: 0, y: 5)
-        .padding(5)
+        .background {
+            DVITheme.overlayShape()
+                .fill(overlayFill)
+        }
+        .overlay {
+            DVITheme.overlayShape()
+                .stroke(overlayStroke, lineWidth: 0.7)
+        }
+        .background(Color.clear)
+        .clipShape(DVITheme.overlayShape())
         .preferredColorScheme(settings.appearancePreference.colorScheme)
         .animation(.smooth(duration: 0.24), value: previewState.transcript)
         .animation(.smooth(duration: 0.24), value: previewState.errorMessage)
@@ -196,10 +215,17 @@ private struct PreviewOverlayView: View {
         .animation(.smooth(duration: 0.20), value: previewState.isRecording)
     }
 
+    private func compactHintText(for message: String) -> String {
+        if message.contains("没有识别") || message.contains("说话时间太短") {
+            return "没有听清"
+        }
+        return message
+    }
+
     private var waveform: some View {
         WaveformMeter(
             level: previewState.audioLevel,
-            tint: ready,
+            tint: transcriptMetrics.trimmedText.isEmpty ? DVITheme.selectedInk : ready,
             isActive: previewState.isRecording,
             isCompact: previewState.transcript.isEmpty
         )
@@ -210,24 +236,25 @@ private struct PreviewOverlayView: View {
             ProgressView()
                 .controlSize(.small)
                 .scaleEffect(0.75)
+                .tint(DVITheme.selectedInk)
 
-            Text("AI 处理中")
-                .font(.system(size: 13, weight: .regular))
-                .foregroundStyle(DVITheme.secondaryInk)
+            Text("处理中")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(DVITheme.selectedInk.opacity(0.90))
         }
     }
 
     private var transcriptContent: some View {
-        ZStack(alignment: .bottomTrailing) {
+        ZStack(alignment: .center) {
+            embeddedWaveform
+
             RollingTranscriptText(
                 text: transcriptMetrics.displayText,
                 lineLimit: transcriptMetrics.lineCount,
-                color: primaryText
+                color: DVITheme.selectedInk
             )
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 4)
             .frame(maxWidth: .infinity, alignment: .center)
-
-            embeddedWaveform
         }
     }
 
@@ -245,14 +272,14 @@ private struct PreviewOverlayView: View {
             } else {
                 WaveformMeter(
                     level: previewState.audioLevel,
-                    tint: ready,
+                    tint: DVITheme.selectedInk,
                     isActive: previewState.isRecording,
                     isCompact: false
                 )
-                .scaleEffect(0.90)
-                .opacity(0.16)
-                .padding(.trailing, 3)
-                .padding(.bottom, 0)
+                .scaleEffect(0.92)
+                .opacity(0.18)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.trailing, 2)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
             }
@@ -262,7 +289,9 @@ private struct PreviewOverlayView: View {
 }
 
 private struct TranscriptLayoutMetrics {
-    private static let charactersPerLine = 28
+    private static let singleLineLimit = 24
+    private static let doubleLineLimit = 54
+    private static let charactersPerLine = 24
     let trimmedText: String
     let lineCount: Int
     let displayText: String
@@ -280,9 +309,16 @@ private struct TranscriptLayoutMetrics {
             return
         }
 
-        let requiredLines = Int(ceil(Double(normalized.count) / Double(Self.charactersPerLine)))
-        let lineCount = min(max(requiredLines, 1), 2)
-        let capacity = max(Self.charactersPerLine * lineCount - 1, 1)
+        let lineCount: Int
+        if normalized.count <= Self.singleLineLimit {
+            lineCount = 1
+        } else if normalized.count <= Self.doubleLineLimit {
+            lineCount = 2
+        } else {
+            lineCount = 3
+        }
+
+        let capacity = max(Self.charactersPerLine * lineCount - 2, 1)
         self.lineCount = lineCount
 
         if normalized.count > capacity {
@@ -302,12 +338,12 @@ private struct RollingTranscriptText: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 15, weight: .medium))
+            .font(.system(size: 14.5, weight: .semibold))
             .foregroundStyle(color)
             .multilineTextAlignment(.center)
             .lineLimit(lineLimit)
             .truncationMode(.tail)
-            .lineSpacing(2.8)
+            .lineSpacing(3.2)
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .center)
             .blur(radius: blurRadius)

@@ -4,7 +4,7 @@ import XCTest
 final class DesktopVoiceInputTests: XCTestCase {
     func testPostProcessorDoesNotAddTerminalPunctuation() {
         let processor = TranscriptPostProcessor()
-        XCTAssertEqual(processor.finalize("你好 今天过得怎么样"), "你好 今天过得怎么样")
+        XCTAssertEqual(processor.finalize("你好 今天过得怎么样"), "你好今天过得怎么样")
     }
 
     func testPostProcessorPreservesExistingPunctuation() {
@@ -14,7 +14,17 @@ final class DesktopVoiceInputTests: XCTestCase {
 
     func testPostProcessorCollapsesWhitespace() {
         let processor = TranscriptPostProcessor()
-        XCTAssertEqual(processor.finalize("  明天   上午  十点   开会  "), "明天 上午 十点 开会")
+        XCTAssertEqual(processor.finalize("  明天   上午  十点   开会  "), "明天上午十点开会")
+    }
+
+    func testPostProcessorRemovesChinesePauseSpaces() {
+        let processor = TranscriptPostProcessor()
+        XCTAssertEqual(processor.finalize("这个 过程 中 就 会 有 空格"), "这个过程中就会有空格")
+    }
+
+    func testPostProcessorPreservesEnglishWordSpaces() {
+        let processor = TranscriptPostProcessor()
+        XCTAssertEqual(processor.finalize("打开 OpenAI Cloud 控制台"), "打开 OpenAI Cloud 控制台")
     }
 
     func testRemoveTrailingPunctuationAfterWhitespace() {
@@ -22,9 +32,14 @@ final class DesktopVoiceInputTests: XCTestCase {
         XCTAssertEqual(result, "今天先这样")
     }
 
-    func testRemoveTrailingPunctuationRemovesMultipleMarks() {
+    func testRemoveTrailingPunctuationKeepsQuestionAndExclamationMarks() {
         let result = TextTransform.removeTrailingPunctuation.apply(to: "真的吗？！")
-        XCTAssertEqual(result, "真的吗")
+        XCTAssertEqual(result, "真的吗？！")
+    }
+
+    func testRemoveTrailingPunctuationRemovesOnlyTerminalPeriods() {
+        let result = TextTransform.removeTrailingPunctuation.apply(to: "今天先这样。。")
+        XCTAssertEqual(result, "今天先这样")
     }
 
     func testRemoveTrailingPunctuationKeepsMiddlePunctuation() {
@@ -39,10 +54,67 @@ final class DesktopVoiceInputTests: XCTestCase {
         XCTAssertEqual(payload?.text, "这是豆包官方推荐的累积完整文本。")
     }
 
+    func testDoubaoTranscriptPayloadNormalizesChinesePauseSpaces() {
+        let payload = DoubaoTranscriptPayload(resultObject: [
+            "text": "这个 过程 中 就 会 有 空格"
+        ])
+        XCTAssertEqual(payload?.canonicalText, "这个过程中就会有空格")
+        XCTAssertEqual(payload?.rawCanonicalText, "这个 过程 中 就 会 有 空格")
+    }
+
     func testDoubaoTranscriptPayloadReturnsNilWhenEmpty() {
         let payload = DoubaoTranscriptPayload(resultObject: [
             "text": "   "
         ])
         XCTAssertNil(payload)
+    }
+
+    func testDoubaoTranscriptPayloadReadsUtterances() {
+        let payload = DoubaoTranscriptPayload(resultObject: [
+            "text": "整段文本",
+            "utterances": [
+                ["definite": true, "start_time": 0, "end_time": 500, "text": "已经确定，"],
+                ["definite": false, "start_time": 500, "end_time": 900, "text": "还在识别"]
+            ]
+        ])
+
+        XCTAssertEqual(payload?.utterances.count, 2)
+        XCTAssertEqual(payload?.definiteCount, 1)
+    }
+
+    func testDoubaoTranscriptPayloadReadsResultList() {
+        let payload = DoubaoTranscriptPayload(resultValue: [
+            [
+                "text": "列表结构",
+                "utterances": [
+                    ["definite": true, "start_time": 0, "end_time": 500, "text": "列表结构"]
+                ]
+            ]
+        ])
+
+        XCTAssertEqual(payload?.text, "列表结构")
+        XCTAssertEqual(payload?.utterances.count, 1)
+    }
+
+    func testDoubaoCanonicalTextPrefersServiceFullText() {
+        let payload = DoubaoTranscriptPayload(resultObject: [
+            "text": "服务端完整结果",
+            "utterances": [
+                ["definite": true, "start_time": 0, "end_time": 800, "text": "局部分句"]
+            ]
+        ])
+
+        XCTAssertEqual(payload?.canonicalText, "服务端完整结果")
+    }
+
+    func testDoubaoCanonicalTextFallsBackToTimeSortedUtterances() {
+        let payload = DoubaoTranscriptPayload(resultObject: [
+            "utterances": [
+                ["definite": false, "start_time": 800, "end_time": 1200, "text": "颜色"],
+                ["definite": true, "start_time": 0, "end_time": 800, "text": "整个应用的"]
+            ]
+        ])
+
+        XCTAssertEqual(payload?.canonicalText, "整个应用的颜色")
     }
 }
