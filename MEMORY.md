@@ -68,9 +68,11 @@
 - Doubao diagnostics intentionally log raw provider transcript text and normalized transcript text in Release builds while this issue is being verified. Each update is printed as `[DoubaoTranscript]` and also appended to `~/Library/Logs/GuGuTalk/doubao-transcripts.log`. Remove or gate these transcript-content logs before a privacy-sensitive public release.
 - Doubao WebSocket sends must stay serialized. Audio tap chunks are produced from multiple async tasks, so the transport must prevent a finish frame from overtaking earlier audio frames; otherwise Doubao can report `last packet has been received already` and the app may fall back to unstable partial text.
 - Doubao `bigmodel_async` with `result_type = "full"` should normally be treated as provider-owned full replacement text. However, real logs showed terminal final can occasionally drop a stable prefix that existed in the immediately previous partial/full update, such as previous `Gemini 之前还` followed by terminal raw `之前还挺好用的。`. The client now protects only this terminal-finish edge case with overlap-based prefix repair and logs `repairedFromPrevious` plus `emitted`.
+- Text insertion still needs compatibility hardening. Clipboard paste dispatch cannot prove the target input field actually accepted the text; current mitigation extends pasteboard restore delay to `2.0s` and logs paste dispatch honestly instead of treating it as guaranteed insertion.
+- WeChat (`com.tencent.xinWeChat` / `com.tencent.WeChat`) uses a per-app insertion strategy: Accessibility insertion -> targeted Unicode keyboard events -> clipboard paste fallback. Logs showed clipboard dispatch could report success without visible insertion in WeChat, so clipboard must remain the last resort there.
 - Local DMG artifacts must be generated with `./scripts/package-dmg.sh` and stored only in `dist/dmg/`. Do not create new DMGs in the repo root, `Packages/`, Desktop, Downloads, or random temporary folders.
 
-## Latest Synced State - 2026-05-10
+## Latest Synced State - 2026-05-11
 
 These changes are synced to GitHub on `main`:
 
@@ -89,8 +91,51 @@ These changes are synced to GitHub on `main`:
 - Doubao terminal final has one conservative protection: if the terminal final drops a stable prefix seen in the previous update, `DoubaoTranscriptRepair` may repair that terminal-finish edge case using overlap matching.
 - Occasional one-or-two-character repetitions are still a known verification target. Do not add broad local dedupe until `[DoubaoTranscript]` logs prove whether the raw provider `result.text` or local processing created the repetition.
 - Documentation audit completed on 2026-05-10: README, DESIGN, CONTRIBUTING, BUGS, MEMORY, and HANDOFF have been aligned with the current implementation for macOS target, hotkeys, AppKit settings window, Doubao `result_type = "full"`, custom controls, local test coverage, and self-text-field insertion behavior.
+- WeChat insertion now has a per-app stable path: Accessibility insertion first, targeted Unicode keyboard events second, clipboard paste only as the final fallback.
+- Non-AI final recognition now actively schedules overlay dismissal after successful insertion instead of depending only on provider `sessionEnded`.
+- Clipboard paste logging is intentionally conservative: it reports that paste was dispatched, not that the target field definitely accepted it.
 
-## Latest Local Fixes - 2026-05-10
+## Latest Fixes - 2026-05-11
+
+### WeChat insertion and stuck overlay mitigation
+
+- User reported that in WeChat the overlay showed recognized final text, but the text did not appear in the WeChat input field and the overlay did not disappear.
+- Logs showed the recognition/final path completed and insertion targeted `微信`; the weak point was still the target-specific insertion path and overlay dismissal after successful final handling.
+- Current code changes:
+  - `TextInsertionService` logs target bundle ID.
+  - WeChat bundle IDs `com.tencent.xinWeChat` and `com.tencent.WeChat` now use Accessibility insertion first.
+  - If WeChat Accessibility insertion fails, the app sends targeted Unicode keyboard events to the WeChat process.
+  - Clipboard paste remains only the final fallback for WeChat.
+  - Non-AI final handling now schedules preview dismissal `0.8s` after a successful insertion flow.
+  - `scheduleDismiss` now logs when dismissal is scheduled and when it actually fires.
+- Verification:
+  - Debug `xcodebuild` passed.
+  - Release `xcodebuild` passed.
+  - `swift test` passed 19 tests.
+  - Latest Release app launched from `/tmp/DesktopVoiceInputReleaseDerivedData/Build/Products/Release/DesktopVoiceInput.app` with PID `86388`.
+- Important handoff note: this still needs real WeChat retest. If WeChat still fails, inspect TextInsertion logs for whether Accessibility failed, whether `发送 Unicode 键入事件` was emitted, and whether it eventually fell back to clipboard.
+
+### Recognition succeeds but final text sometimes does not appear in the target app
+
+- User reported a session where the overlay showed recognized text, Doubao returned final text, but no text appeared in the foreground input field.
+- Evidence confirmed recognition was not the failing layer: `~/Library/Logs/GuGuTalk/doubao-transcripts.log` contained final text for the session.
+- System logs showed `TextInsertionService` targeted `Codex` and used the clipboard paste path.
+- Root risk: the clipboard paste path can only confirm that GuGuTalk placed text on the pasteboard and sent Cmd+V. macOS does not provide a direct confirmation that the target input field accepted the paste.
+- Previous pasteboard restore delay was `0.6s`, which may be too short for Electron/Web/rich-text editors that read pasteboard data asynchronously.
+- Current code changes:
+  - `TextInsertionService.clipboardPasteInsertion` restores the previous pasteboard after `2.0s` instead of `0.6s`.
+  - TextInsertion logs now say the paste command was dispatched and cannot be directly verified, instead of claiming guaranteed paste success.
+- Verification:
+  - Debug `xcodebuild` passed.
+  - Release `xcodebuild` passed.
+  - `swift test` passed 19 tests.
+  - `./scripts/package-dmg.sh` completed and verified the DMG checksum.
+- Latest packaged DMG:
+  - `dist/dmg/GuGuTalk-20260511-2230-7747489.dmg`
+  - `dist/dmg/GuGuTalk-20260511-2230-7747489.dmg.sha256`
+- Important handoff note: the DMG filename still uses the older committed short hash `7747489`; rebuild a fresh DMG after this commit if a distributable artifact is needed.
+
+## Historical Fixes - 2026-05-10
 
 ### Doubao repeated-word investigation and send ordering
 

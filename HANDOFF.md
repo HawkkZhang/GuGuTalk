@@ -2,6 +2,61 @@
 
 This file is the first-stop handoff note for switching between Codex, Claude Code, Xcode, and other development tools.
 
+## Recent Fixes - 2026-05-11
+
+### 微信中 final 已到但不上屏/气泡不消失（2026-05-11，已实现，待微信实测确认）
+
+**用户反馈：**
+- 在微信里使用时，识别文字已经显示在气泡中，但没有上屏，气泡也没有消失。
+
+**本轮定位：**
+- 日志证明微信会话已拿到 final，并且 `TextInsertionService` 对目标应用 `微信` 执行了插入流程。
+- 之前微信仍走剪贴板优先路径；这条路径只能证明 GuGuTalk 发出了 Cmd+V，不能证明微信输入框实际接受了粘贴。
+- 之前非 AI 后处理分支拿到 final 后主要等待 provider 的 `sessionEnded` 来触发气泡隐藏；如果收尾链路出现竞态，气泡可能留在屏幕上。
+
+**本轮修复：**
+- `TextInsertionService` 现在对微信 bundle (`com.tencent.xinWeChat` / `com.tencent.WeChat`) 使用 per-app 稳定插入策略：Accessibility API 直写 -> 定向 Unicode 键入 -> 剪贴板兜底。
+- 插入日志现在包含目标应用 bundle ID，便于区分微信、Codex、浏览器等目标。
+- 非 AI 分支在 final 插入流程成功后主动安排 `0.8s` 后隐藏气泡，不再只依赖 provider `sessionEnded`。
+- `scheduleDismiss` 增加日志：会记录安排隐藏和实际隐藏，后续如果气泡再卡住能直接查到是否执行过。
+
+**验证：**
+- Debug `xcodebuild` passed。
+- Release `xcodebuild` passed。
+- `swift test` passed：19 tests。
+- 最新 Release app 已重启：`/tmp/DesktopVoiceInputReleaseDerivedData/Build/Products/Release/DesktopVoiceInput.app`，PID `86388`。
+
+**待确认：**
+- 需要用户在微信里再说一两句，确认 Unicode 键入路径是否比剪贴板路径更稳定，以及气泡是否稳定自动消失。
+- 如果微信仍不上屏，优先查看日志是否出现 `发送 Unicode 键入事件`；若出现但微信没收到，下一步应增加更强的焦点/输入框检测，而不是继续改识别链路。
+
+### 识别成功但不上屏的插入链路排查（2026-05-11，已实现，待实测确认）
+
+**用户反馈：**
+- 气泡中已经出现识别内容，豆包也返回了 final，但最终文本没有上屏。
+
+**本轮定位：**
+- `~/Library/Logs/GuGuTalk/doubao-transcripts.log` 证明豆包 final 已经返回，例如 `啥情况？为什么不上屏？`。
+- 系统日志显示 `TextInsertionService` 已对目标应用 `Codex` 执行剪贴板粘贴路径。
+- 旧日志把“已把文本放入剪贴板并发送 ⌘V”记录为“剪贴板粘贴成功”，但 macOS 没有直接回执能证明目标输入框实际接收了粘贴。
+- 旧剪贴板恢复延迟为 `0.6s`，对 Electron/Web 富文本输入框可能过短，目标应用尚未读取剪贴板时内容已经被恢复，造成“应用以为成功、用户没看到上屏”。
+
+**本轮修复：**
+- 剪贴板恢复延迟从 `0.6s` 调整为 `2.0s`，提高 Web/Electron 输入框读取成功率。
+- 插入日志文案改为“剪贴板粘贴指令已发送；系统无法直接确认目标输入框是否实际接收”，避免误判为确定成功。
+
+**验证与产物：**
+- Debug `xcodebuild` passed。
+- Release `xcodebuild` passed。
+- `swift test` passed：19 tests。
+- 已用 `./scripts/package-dmg.sh` 重新打包并校验 DMG。
+- 最新 DMG：`dist/dmg/GuGuTalk-20260511-2230-7747489.dmg`。
+- 校验文件：`dist/dmg/GuGuTalk-20260511-2230-7747489.dmg.sha256`。
+- 注意：文件名里的 `7747489` 是较早的已提交 commit；如需给朋友分发，需要在本次提交后重新打包新的 DMG。
+
+**后续风险：**
+- 剪贴板粘贴仍无法 100% 验证目标输入框已收到文本。后续需要设计 per-app 插入策略和更强的失败恢复：对可靠原生输入框优先 AX 直写，对 Web/Electron 继续优先粘贴，并在失败疑似发生时保留可复制文本。
+
 ## Recent Fixes - 2026-05-10
 
 ### 深色模式设置页降亮度与可读性调整（本地已实现，待用户体验确认）

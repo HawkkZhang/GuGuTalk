@@ -467,7 +467,9 @@ final class RecognitionOrchestrator: ObservableObject {
                 finalTranscript = processed.isEmpty ? finalResult : processed
                 Self.logger.info("Final text ready for insertion. insertedText=\(self.finalTranscript, privacy: .public)")
                 previewState.transcript = finalTranscript
-                insertFinalText()
+                if insertFinalText() {
+                    scheduleDismiss(delay: 0.8)
+                }
             }
         case .providerSwitched(let info):
             previewState.message = "已切换 \(info.from.title) -> \(info.to.title)"
@@ -616,10 +618,12 @@ final class RecognitionOrchestrator: ObservableObject {
     }
 
     private func scheduleDismiss(delay: Double) {
+        Self.logger.info("Scheduling preview dismiss. delay=\(delay, privacy: .public)")
         dismissTask?.cancel()
         dismissTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled else { return }
+            Self.logger.info("Dismissing preview after scheduled delay")
             self.previewState.isVisible = false
             self.previewState.resetToIdle()
         }

@@ -11,8 +11,9 @@ final class TextInsertionService {
         let frontmostApplication = NSWorkspace.shared.frontmostApplication
         let targetApp = frontmostApplication?.localizedName
         let targetBundleID = frontmostApplication?.bundleIdentifier
+        let targetProcessID = frontmostApplication?.processIdentifier
 
-        Self.logger.info("开始插入文本，目标应用: \(targetApp ?? "未知", privacy: .public)，文本长度: \(text.count)")
+        Self.logger.info("开始插入文本，目标应用: \(targetApp ?? "未知", privacy: .public)，bundleID: \(targetBundleID ?? "未知", privacy: .public)，文本长度: \(text.count)")
 
         if targetBundleID == Bundle.main.bundleIdentifier, !focusedElementLooksEditable() {
             Self.logger.warning("目标是自己的窗口，但焦点不是可输入控件，拒绝插入")
@@ -24,9 +25,24 @@ final class TextInsertionService {
             )
         }
 
+        if usesWeChatStableInsertion(bundleID: targetBundleID) {
+            Self.logger.info("微信稳定插入策略：Accessibility -> Unicode 键入 -> 剪贴板兜底")
+            if let result = accessibilityInsertion(text: text, targetApp: targetApp) {
+                Self.logger.info("✓ Accessibility 插入成功")
+                return result
+            }
+            Self.logger.warning("✗ Accessibility 插入失败，将改用 Unicode 键入")
+
+            if simulatedKeyboardInsertion(text: text, targetProcessID: targetProcessID) {
+                Self.logger.info("✓ Unicode 键入指令已发送到目标应用")
+                return InsertionResult(method: .simulatedKeyboard, targetAppName: targetApp, succeeded: true, failureReason: nil)
+            }
+            Self.logger.warning("✗ Unicode 键入失败，将回退到剪贴板粘贴")
+        }
+
         Self.logger.info("尝试方法 1: 剪贴板粘贴")
         if clipboardPasteInsertion(text: text) {
-            Self.logger.info("✓ 剪贴板粘贴成功")
+            Self.logger.info("✓ 剪贴板粘贴指令已发送；系统无法直接确认目标输入框是否实际接收")
             return InsertionResult(method: .clipboardPaste, targetAppName: targetApp, succeeded: true, failureReason: nil)
         }
         Self.logger.warning("✗ 剪贴板粘贴失败")
@@ -39,13 +55,21 @@ final class TextInsertionService {
         Self.logger.warning("✗ Accessibility 插入失败")
 
         Self.logger.info("尝试方法 3: 模拟键盘输入")
-        if simulatedKeyboardInsertion(text: text) {
+        if simulatedKeyboardInsertion(text: text, targetProcessID: targetProcessID) {
             Self.logger.info("✓ 模拟键盘成功")
             return InsertionResult(method: .simulatedKeyboard, targetAppName: targetApp, succeeded: true, failureReason: nil)
         }
         Self.logger.error("✗ 所有插入方法都失败")
 
         return InsertionResult(method: .failed, targetAppName: targetApp, succeeded: false, failureReason: "无法写入当前应用，请手动复制预览文本。")
+    }
+
+    private func usesWeChatStableInsertion(bundleID: String?) -> Bool {
+        guard let bundleID else { return false }
+        return [
+            "com.tencent.xinWeChat",
+            "com.tencent.WeChat"
+        ].contains(bundleID)
     }
 
     private func accessibilityInsertion(text: String, targetApp: String?) -> InsertionResult? {
@@ -143,24 +167,65 @@ final class TextInsertionService {
         return CFRange(location: location, length: length)
     }
 
-    private func simulatedKeyboardInsertion(text: String) -> Bool {
+    private func simulatedKeyboardInsertion(text: String, targetProcessID: pid_t?) -> Bool {
         guard AXIsProcessTrusted() else { return false }
 
+        let chunks = unicodeTextChunks(from: text)
+        guard !chunks.isEmpty else { return true }
+
         let source = CGEventSource(stateID: .combinedSessionState)
-        for scalar in text.unicodeScalars {
+        Self.logger.info("发送 Unicode 键入事件。chunks=\(chunks.count, privacy: .public) targetPID=\(targetProcessID ?? -1, privacy: .public)")
+
+        for chunk in chunks {
             guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
                   let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
                 return false
             }
 
-            var utf16 = Array(String(scalar).utf16)
+            var utf16 = Array(chunk.utf16)
             keyDown.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
             keyUp.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
-            keyDown.post(tap: .cghidEventTap)
-            keyUp.post(tap: .cghidEventTap)
+            keyDown.flags = []
+            keyUp.flags = []
+
+            if let targetProcessID {
+                keyDown.postToPid(targetProcessID)
+                keyUp.postToPid(targetProcessID)
+            } else {
+                keyDown.post(tap: .cghidEventTap)
+                keyUp.post(tap: .cghidEventTap)
+            }
+
+            if chunks.count > 1 {
+                Thread.sleep(forTimeInterval: 0.002)
+            }
         }
 
         return true
+    }
+
+    private func unicodeTextChunks(from text: String, maxUTF16Count: Int = 32) -> [String] {
+        var chunks: [String] = []
+        var current = ""
+        var currentCount = 0
+
+        for character in text {
+            let characterText = String(character)
+            let characterCount = characterText.utf16.count
+            if !current.isEmpty, currentCount + characterCount > maxUTF16Count {
+                chunks.append(current)
+                current = ""
+                currentCount = 0
+            }
+
+            current.append(character)
+            currentCount += characterCount
+        }
+
+        if !current.isEmpty {
+            chunks.append(current)
+        }
+        return chunks
     }
 
     private func clipboardPasteInsertion(text: String) -> Bool {
@@ -187,7 +252,7 @@ final class TextInsertionService {
         keyDown.post(tap: .cghidEventTap)
         keyUp.post(tap: .cghidEventTap)
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
             guard pasteboard.changeCount == changeCountAfterSet else { return }
             savedContents.restore(to: pasteboard)
         }
