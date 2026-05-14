@@ -2,6 +2,38 @@
 
 This file is the first-stop handoff note for switching between Codex, Claude Code, Xcode, and other development tools.
 
+## Recent Fixes - 2026-05-14
+
+### 按快捷键后偶发提示没有听到声音（已实现，待真实按键实测）
+
+**用户反馈：**
+- 仍然会出现按了快捷键后提示没有听到声音 / 没有识别到内容的情况。
+
+**本轮定位：**
+- `RecognitionOrchestrator.beginCapture()` 旧流程是先启动 provider，等本地/豆包/千问 provider ready 后才调用 `AudioCaptureEngine.startCapture`。
+- 豆包/千问 WebSocket 启动或本地识别器初始化慢一点时，用户按下快捷键马上说的开头不会进入音频引擎。
+- 如果用户说的是短句，或者释放热键发生在 provider ready 之前，系统会在 provider ready 后才开始录一小段，最后容易走到“说话时间太短，没有识别到内容”。
+- 另一个尾部问题：`endCapture()` 旧代码想延迟 300ms 停止音频捕获，但先设置了 `isFinishRequested = true`，音频回调会因为这个标记丢掉这 300ms 的尾音。
+
+**本轮修复：**
+- 通过权限和配置检查后立刻启动 `AudioCaptureEngine`，不再等待 provider ready。
+- provider 启动期间捕获到的音频先进入 4 秒上限的 `AudioPrerollBuffer`。
+- provider ready 后，先按顺序 flush 预录缓存，再切回正常实时发送。
+- flush 过程中继续进来的音频仍会暂存，避免实时音频跑到预录音频前面。
+- 松开热键后的 300ms tail buffer 现在可以继续发送音频，直到真正 `stopCapture()`。
+- 气泡启动文案改为“正在聆听，识别引擎启动中”，语义上允许用户按下后立即说话。
+
+**验证：**
+- `swift test` passed：21 tests。
+- Debug `xcodebuild` passed。
+- 已尝试 `open /tmp/DesktopVoiceInputDerivedData/Build/Products/Debug/DesktopVoiceInput.app`，但没有 `DesktopVoiceInput` 进程保持运行；这与之前 Debug app 受 Xcode debug dylib 本地签名影响的记录一致。真实体验建议继续用 Release build / DMG 验证。
+- Release `xcodebuild` passed。
+- Latest Release app launched from `/tmp/DesktopVoiceInputReleaseDerivedData/Build/Products/Release/DesktopVoiceInput.app`，PID `4202`。
+
+**待实测：**
+- 用豆包模式按住快捷键后立刻说短句，确认不再丢开头或误报没听到。
+- 快速按下/松开短句也要测一轮；如果仍偶发，下一步查 `Audio capture started before provider readiness`、`Flushing startup audio`、`Pending stop detected` 和 provider final 日志。
+
 ## Recent Fixes - 2026-05-11
 
 ### 微信中 final 已到但不上屏/气泡不消失（2026-05-11，已实现，待微信实测确认）

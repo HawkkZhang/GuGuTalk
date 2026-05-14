@@ -40,6 +40,8 @@ final class RecognitionOrchestrator: ObservableObject {
     private var isStartingSession = false
     private var isSessionActive = false
     private var isFinishRequested = false
+    private var isFlushingStartupAudio = false
+    private var startupAudioBuffer = AudioPrerollBuffer(maxDuration: 4.0)
     private var sessionGeneration = 0
 
     init(
@@ -82,6 +84,8 @@ final class RecognitionOrchestrator: ObservableObject {
         isPendingStop = false
         isStartingSession = true
         isFinishRequested = false
+        isFlushingStartupAudio = false
+        startupAudioBuffer.removeAll()
 
         // 快速检查权限（不弹窗）
         await permissionCoordinator.refreshAll(promptForSystemDialogs: false)
@@ -104,11 +108,31 @@ final class RecognitionOrchestrator: ObservableObject {
         // 立即显示气泡
         previewState.isVisible = true
         previewState.title = "正在聆听"
-        previewState.message = "正在启动识别引擎"
+        previewState.message = "正在聆听，识别引擎启动中"
         previewState.isRecording = true
         Self.logger.info("Starting capture. generation=\(generation, privacy: .public) mode=\(config.mode.title, privacy: .public) sampleRate=\(config.sampleRate, privacy: .public)")
 
         do {
+            try audioCaptureEngine.startCapture { [weak self] chunk in
+                let route = await MainActor.run {
+                    guard let self else { return AudioChunkRoute.drop }
+                    return self.routeAudioChunk(chunk, generation: generation)
+                }
+
+                guard case .send(let provider) = route else { return }
+
+                do {
+                    try await provider.sendAudio(chunk)
+                } catch {
+                    await MainActor.run {
+                        guard let self, self.sessionGeneration == generation else { return }
+                        Self.logger.error("sendAudio failed: \(error.localizedDescription, privacy: .public)")
+                        self.fail(message: "发送音频失败：\(error.localizedDescription)")
+                    }
+                }
+            }
+            Self.logger.info("Audio capture started before provider readiness")
+
             let selection = try await startProviderChain(selections, config: config, generation: generation)
             guard sessionGeneration == generation else {
                 Self.logger.info("Ignoring provider start because capture generation was superseded. generation=\(generation, privacy: .public) currentGeneration=\(self.sessionGeneration, privacy: .public)")
@@ -123,27 +147,7 @@ final class RecognitionOrchestrator: ObservableObject {
             isStartingSession = false
             Self.logger.info("Provider ready. mode=\(selection.mode.title, privacy: .public)")
 
-            try audioCaptureEngine.startCapture { [weak self] chunk in
-                guard let self else { return }
-                let shouldSend = await MainActor.run {
-                    guard self.sessionGeneration == generation, self.isSessionActive, !self.isFinishRequested else {
-                        return false
-                    }
-                    self.previewState.audioLevel = chunk.audioLevel
-                    return true
-                }
-                guard shouldSend else { return }
-
-                do {
-                    try await selection.provider.sendAudio(chunk)
-                } catch {
-                    await MainActor.run {
-                        Self.logger.error("sendAudio failed: \(error.localizedDescription, privacy: .public)")
-                        self.fail(message: "发送音频失败：\(error.localizedDescription)")
-                    }
-                }
-            }
-            Self.logger.info("Audio capture started")
+            try await flushStartupAudio(to: selection.provider, generation: generation)
 
             if isPendingStop {
                 Self.logger.info("Pending stop detected immediately after capture start")
@@ -265,6 +269,8 @@ final class RecognitionOrchestrator: ObservableObject {
         let providerStartingUp = startingProvider
         activeProvider = nil
         startingProvider = nil
+        isFlushingStartupAudio = false
+        startupAudioBuffer.removeAll()
         stopAudioCapture(reason: "user restart: \(reason)")
 
         finalTranscript = ""
@@ -332,6 +338,50 @@ final class RecognitionOrchestrator: ObservableObject {
         }
 
         throw lastFailure ?? SessionFailureInfo(message: "所有识别引擎都不可用。")
+    }
+
+    private func routeAudioChunk(_ chunk: AudioChunk, generation: Int) -> AudioChunkRoute {
+        guard sessionGeneration == generation, isStartingSession || isSessionActive else {
+            return .drop
+        }
+
+        previewState.audioLevel = chunk.audioLevel
+
+        guard isSessionActive, !isFlushingStartupAudio, let activeProvider else {
+            startupAudioBuffer.append(chunk)
+            return .buffer
+        }
+
+        return .send(activeProvider)
+    }
+
+    private func flushStartupAudio(to provider: SpeechProvider, generation: Int) async throws {
+        isFlushingStartupAudio = true
+
+        while true {
+            guard sessionGeneration == generation, isSessionActive else {
+                startupAudioBuffer.removeAll()
+                isFlushingStartupAudio = false
+                throw SupersededSessionError()
+            }
+
+            let chunks = startupAudioBuffer.drain()
+            if chunks.isEmpty {
+                isFlushingStartupAudio = false
+                Self.logger.info("Startup audio flush completed")
+                return
+            }
+
+            Self.logger.info("Flushing startup audio. chunks=\(chunks.count, privacy: .public)")
+            for chunk in chunks {
+                guard sessionGeneration == generation, isSessionActive else {
+                    startupAudioBuffer.removeAll()
+                    isFlushingStartupAudio = false
+                    throw SupersededSessionError()
+                }
+                try await provider.sendAudio(chunk)
+            }
+        }
     }
 
     private func subscribe(to stream: AsyncStream<TranscriptEvent>, generation: Int) {
@@ -513,6 +563,8 @@ final class RecognitionOrchestrator: ObservableObject {
         isFinishRequested = false
         isSessionActive = false
         isSessionRunning = false
+        isFlushingStartupAudio = false
+        startupAudioBuffer.removeAll()
         activeProvider = nil
         startingProvider = nil
         previewState.isRecording = false
@@ -537,6 +589,8 @@ final class RecognitionOrchestrator: ObservableObject {
         isFinishRequested = false
         isSessionActive = false
         isSessionRunning = false
+        isFlushingStartupAudio = false
+        startupAudioBuffer.removeAll()
         activeProvider = nil
         startingProvider = nil
         previewState.isRecording = false
@@ -581,6 +635,8 @@ final class RecognitionOrchestrator: ObservableObject {
         isFinishRequested = false
         isSessionActive = false
         isSessionRunning = false
+        isFlushingStartupAudio = false
+        startupAudioBuffer.removeAll()
         consumeEventsTask?.cancel()
         activeProvider = nil
         startingProvider = nil
@@ -603,6 +659,8 @@ final class RecognitionOrchestrator: ObservableObject {
         isFinishRequested = false
         isSessionActive = false
         isSessionRunning = false
+        isFlushingStartupAudio = false
+        startupAudioBuffer.removeAll()
         consumeEventsTask?.cancel()
         consumeEventsTask = nil
         stopAudioCapture(reason: "dismissQuietly: \(message)")
@@ -655,3 +713,57 @@ final class RecognitionOrchestrator: ObservableObject {
 }
 
 private struct SupersededSessionError: Error {}
+
+private enum AudioChunkRoute {
+    case drop
+    case buffer
+    case send(SpeechProvider)
+}
+
+struct AudioPrerollBuffer {
+    let maxDuration: TimeInterval
+    private(set) var chunks: [AudioChunk] = []
+    private(set) var duration: TimeInterval = 0
+
+    init(maxDuration: TimeInterval) {
+        self.maxDuration = max(0, maxDuration)
+    }
+
+    var isEmpty: Bool {
+        chunks.isEmpty
+    }
+
+    mutating func append(_ chunk: AudioChunk) {
+        let chunkDuration = chunk.estimatedDuration
+        chunks.append(chunk)
+        duration += chunkDuration
+
+        while duration > maxDuration, !chunks.isEmpty {
+            let removed = chunks.removeFirst()
+            duration = max(0, duration - removed.estimatedDuration)
+        }
+    }
+
+    mutating func drain() -> [AudioChunk] {
+        let drained = chunks
+        chunks.removeAll(keepingCapacity: true)
+        duration = 0
+        return drained
+    }
+
+    mutating func removeAll() {
+        chunks.removeAll(keepingCapacity: true)
+        duration = 0
+    }
+}
+
+extension AudioChunk {
+    var estimatedDuration: TimeInterval {
+        let safeSampleRate = sampleRate > 0 ? sampleRate : 16_000
+        let safeChannels = max(1, channels)
+        let bytesPerFrame = MemoryLayout<Int16>.size * safeChannels
+        guard bytesPerFrame > 0 else { return 0 }
+        let frames = pcmData.count / bytesPerFrame
+        return TimeInterval(frames) / safeSampleRate
+    }
+}

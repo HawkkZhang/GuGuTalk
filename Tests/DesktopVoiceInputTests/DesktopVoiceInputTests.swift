@@ -1,4 +1,5 @@
 import XCTest
+import AVFoundation
 @testable import DesktopVoiceInput
 
 final class DesktopVoiceInputTests: XCTestCase {
@@ -146,5 +147,46 @@ final class DesktopVoiceInputTests: XCTestCase {
 
         XCTAssertFalse(repaired.didRecover)
         XCTAssertEqual(repaired.text, "还挺好用的。")
+    }
+
+    func testAudioPrerollBufferKeepsRecentAudioWithinDurationLimit() {
+        var buffer = AudioPrerollBuffer(maxDuration: 1.0)
+
+        buffer.append(makeAudioChunk(duration: 0.4, level: 0.1))
+        buffer.append(makeAudioChunk(duration: 0.4, level: 0.2))
+        buffer.append(makeAudioChunk(duration: 0.4, level: 0.3))
+
+        XCTAssertEqual(buffer.chunks.count, 2)
+        XCTAssertEqual(buffer.chunks.first?.audioLevel, 0.2)
+        XCTAssertEqual(buffer.chunks.last?.audioLevel, 0.3)
+        XCTAssertLessThanOrEqual(buffer.duration, 1.0)
+    }
+
+    func testAudioPrerollBufferDrainPreservesOrderAndClearsBuffer() {
+        var buffer = AudioPrerollBuffer(maxDuration: 2.0)
+
+        buffer.append(makeAudioChunk(duration: 0.25, level: 0.1))
+        buffer.append(makeAudioChunk(duration: 0.25, level: 0.2))
+
+        let drained = buffer.drain()
+
+        XCTAssertEqual(drained.map(\.audioLevel), [0.1, 0.2])
+        XCTAssertTrue(buffer.isEmpty)
+        XCTAssertEqual(buffer.duration, 0)
+    }
+
+    private func makeAudioChunk(duration: TimeInterval, level: Float) -> AudioChunk {
+        let sampleRate = 16_000.0
+        let frameCount = AVAudioFrameCount(duration * sampleRate)
+        let format = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: sampleRate, channels: 1, interleaved: false)!
+        let nativeBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)!
+        nativeBuffer.frameLength = frameCount
+        return AudioChunk(
+            pcmData: Data(count: Int(frameCount) * MemoryLayout<Int16>.size),
+            sampleRate: sampleRate,
+            channels: 1,
+            audioLevel: level,
+            nativeBuffer: nativeBuffer
+        )
     }
 }

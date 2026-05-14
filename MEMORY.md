@@ -64,6 +64,8 @@
 - Capture endpointing should be user-controlled. Hold-to-talk and toggle-to-talk sessions should end on the user's release/stop action, not on provider VAD silence detection.
 - Recognition is single-session only, but async cleanup must be session-scoped: final-result timeout tasks, pending stops, and finish requests must not leak across sessions or terminate a later hold-to-talk recording.
 - If the user manually triggers a new recording while previous recognition work is still active, the app should cancel the previous session/work first and then start the new session. This includes startup handshakes, active providers, audio capture, final timeout, stale provider events, and AI post-processing.
+- Capture now starts microphone audio immediately after permissions pass, before cloud/local provider startup completes. Audio captured during provider startup is held in a bounded 4-second pre-roll buffer and flushed to the selected provider once ready, reducing dropped opening words and false "no speech heard" results.
+- The 300 ms tail-buffer delay after key release should keep accepting audio until capture is actually stopped; do not reintroduce a guard that drops chunks merely because finish has been requested.
 - GuGuTalk must be usable inside its own text fields, including prompt and provider configuration fields. Shortcut recording should suspend global hotkeys only while recording a shortcut; do not block all insertion just because the foreground app is GuGuTalk.
 - Doubao diagnostics intentionally log raw provider transcript text and normalized transcript text in Release builds while this issue is being verified. Each update is printed as `[DoubaoTranscript]` and also appended to `~/Library/Logs/GuGuTalk/doubao-transcripts.log`. Remove or gate these transcript-content logs before a privacy-sensitive public release.
 - Doubao WebSocket sends must stay serialized. Audio tap chunks are produced from multiple async tasks, so the transport must prevent a finish frame from overtaking earlier audio frames; otherwise Doubao can report `last packet has been received already` and the app may fall back to unstable partial text.
@@ -94,6 +96,24 @@ These changes are synced to GitHub on `main`:
 - WeChat insertion now has a per-app stable path: Accessibility insertion first, targeted Unicode keyboard events second, clipboard paste only as the final fallback.
 - Non-AI final recognition now actively schedules overlay dismissal after successful insertion instead of depending only on provider `sessionEnded`.
 - Clipboard paste logging is intentionally conservative: it reports that paste was dispatched, not that the target field definitely accepted it.
+
+## Latest Fixes - 2026-05-14
+
+### Shortcut starts but app reports no speech heard
+
+- User reported that pressing the voice-input shortcut can still show a "no speech heard / no content recognized" style message.
+- Root cause found in `RecognitionOrchestrator.beginCapture()`: the app waited for provider startup before starting `AudioCaptureEngine`. With Doubao/Qwen WebSocket startup, speech that began immediately after the key press could be lost before capture actually started.
+- `RecognitionOrchestrator` now starts audio capture immediately after permission/config checks and before `startProviderChain`.
+- Audio chunks captured while the provider is starting are stored in a bounded 4-second `AudioPrerollBuffer`.
+- After the provider becomes active, the pre-roll buffer is flushed in order before normal live audio routing resumes.
+- The release tail behavior was also corrected: the 300 ms delay before stopping audio capture now has a chance to deliver final chunks instead of dropping them only because `isFinishRequested` was already true.
+- Added tests for `AudioPrerollBuffer` duration trimming and drain order.
+- Verification:
+  - `swift test` passed 21 tests.
+  - Debug `xcodebuild` passed.
+  - Debug app `open` was attempted, but no `DesktopVoiceInput` process remained running afterward, consistent with prior local Debug launch fragility around Xcode debug dylib signing. Use Release launch for real manual testing if Debug still exits immediately.
+  - Release `xcodebuild` passed.
+  - Latest Release app launched from `/tmp/DesktopVoiceInputReleaseDerivedData/Build/Products/Release/DesktopVoiceInput.app` with PID `4202`.
 
 ## Latest Fixes - 2026-05-11
 
