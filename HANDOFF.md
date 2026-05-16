@@ -2,6 +2,38 @@
 
 This file is the first-stop handoff note for switching between Codex, Claude Code, Xcode, and other development tools.
 
+## Recent Fixes - 2026-05-16
+
+### 预录修复后短句一直“没听清”（已实现，待用户真实按键复测）
+
+**用户反馈：**
+- 上一轮优化启动延迟后，用户反馈“现在没法用了，怎么说都是没听清”。
+
+**本轮定位：**
+- 系统日志显示收尾阶段出现 WebSocket `Socket is not connected` 写入失败。
+- 上一轮为了减少开头丢字，provider ready 后会异步 flush 预录缓存，同时实时音频也可能从新的 `Task` 直接发送。
+- 用户松开热键时，`endCapture()` 可能在预录/实时音频还没全部发完时先调用 `finishAudio()`。
+- 结果是服务端先收到结束包，后续音频帧被拒收或忽略，表现为短句/快速说话时反复“没有听到声音”。
+
+**本轮修复：**
+- `RecognitionOrchestrator` 新增单一 `AudioSendQueue`。
+- 音频 tap 不再直接从多个异步任务调用 provider `sendAudio()`；所有预录音频和实时音频都进入同一个队列。
+- 队列由一个发送 loop 串行消费，保持“预录开头 -> 实时音频 -> finish”的顺序。
+- `endCapture()` 在停止音频捕获后，会等待发送队列清空，再调用 `finishAudio()`。
+- 如果发送队列长时间无法清空，会明确报“音频发送超时”，不再让结束包抢跑导致误判“没听清”。
+- 新增 `AudioSendQueue` 单元测试，覆盖发送顺序和时长统计。
+
+**验证：**
+- `swift test` passed：22 tests。
+- Debug `xcodebuild` passed。
+- Debug app `open` 后仍未留下 `DesktopVoiceInput` 进程，和之前本机 Debug 调试 dylib 启动不稳定记录一致。
+- Release `xcodebuild` passed。
+- Latest Release app launched from `/tmp/DesktopVoiceInputReleaseDerivedData/Build/Products/Release/DesktopVoiceInput.app`，PID `60162`。
+
+**待实测：**
+- 用当前已启动的 Release app，在豆包模式下连续试几次短句：按下后立刻说、快速松开、稍长句各测一轮。
+- 如果仍出现“没听清”，优先查看 `RecognitionOrchestrator` 日志里的 `Queueing startup audio`、`Audio send queue drained`、`finishAudio sent to provider` 顺序，以及 `~/Library/Logs/GuGuTalk/doubao-transcripts.log` 是否完全没有 partial。
+
 ## Recent Fixes - 2026-05-14
 
 ### 按快捷键后偶发提示没有听到声音（已实现，待真实按键实测）

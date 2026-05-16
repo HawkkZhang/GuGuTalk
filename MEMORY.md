@@ -65,6 +65,7 @@
 - Recognition is single-session only, but async cleanup must be session-scoped: final-result timeout tasks, pending stops, and finish requests must not leak across sessions or terminate a later hold-to-talk recording.
 - If the user manually triggers a new recording while previous recognition work is still active, the app should cancel the previous session/work first and then start the new session. This includes startup handshakes, active providers, audio capture, final timeout, stale provider events, and AI post-processing.
 - Capture now starts microphone audio immediately after permissions pass, before cloud/local provider startup completes. Audio captured during provider startup is held in a bounded 4-second pre-roll buffer and flushed to the selected provider once ready, reducing dropped opening words and false "no speech heard" results.
+- Orchestrator-level audio sends must also stay serialized. Pre-roll audio and live audio now enter a single `AudioSendQueue`, and `finishAudio()` waits for that queue to drain so the provider never receives an end frame before earlier captured audio.
 - The 300 ms tail-buffer delay after key release should keep accepting audio until capture is actually stopped; do not reintroduce a guard that drops chunks merely because finish has been requested.
 - GuGuTalk must be usable inside its own text fields, including prompt and provider configuration fields. Shortcut recording should suspend global hotkeys only while recording a shortcut; do not block all insertion just because the foreground app is GuGuTalk.
 - Doubao diagnostics intentionally log raw provider transcript text and normalized transcript text in Release builds while this issue is being verified. Each update is printed as `[DoubaoTranscript]` and also appended to `~/Library/Logs/GuGuTalk/doubao-transcripts.log`. Remove or gate these transcript-content logs before a privacy-sensitive public release.
@@ -96,6 +97,28 @@ These changes are synced to GitHub on `main`:
 - WeChat insertion now has a per-app stable path: Accessibility insertion first, targeted Unicode keyboard events second, clipboard paste only as the final fallback.
 - Non-AI final recognition now actively schedules overlay dismissal after successful insertion instead of depending only on provider `sessionEnded`.
 - Clipboard paste logging is intentionally conservative: it reports that paste was dispatched, not that the target field definitely accepted it.
+
+## Latest Fixes - 2026-05-16
+
+### No-speech regression after faster startup capture
+
+- User reported that after the startup-latency fix, voice input became effectively unusable and kept reporting that it did not hear speech.
+- Evidence from system logs showed WebSocket write failure near session finish: `Socket is not connected`.
+- Root cause: `RecognitionOrchestrator` could flush pre-roll audio and send live audio from separate async tasks, while `endCapture()` could call `finishAudio()` before all queued audio reached the provider.
+- `RecognitionOrchestrator` now owns a single `AudioSendQueue`:
+  - audio tap chunks are routed onto the main actor and queued, not sent directly by many tasks
+  - startup pre-roll chunks are queued before live chunks
+  - one send loop consumes the queue sequentially with the active provider
+  - `endCapture()` stops capture, waits for late tap deliveries plus queue drain, then sends `finishAudio()`
+- If the send queue cannot drain within a bounded timeout, the app reports an audio-send timeout instead of sending finish out of order and surfacing a misleading no-speech result.
+- Added `AudioSendQueue` unit coverage for order and duration tracking.
+- Verification:
+  - `swift test` passed 22 tests.
+  - Debug `xcodebuild` passed.
+  - Debug app `open` still did not leave a running process, matching prior local Debug launch fragility.
+  - Release `xcodebuild` passed.
+  - Latest Release app launched from `/tmp/DesktopVoiceInputReleaseDerivedData/Build/Products/Release/DesktopVoiceInput.app` with PID `60162`.
+- This still needs real hold-to-talk retesting with short Doubao phrases.
 
 ## Latest Fixes - 2026-05-14
 

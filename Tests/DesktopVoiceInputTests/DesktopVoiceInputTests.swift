@@ -175,6 +175,20 @@ final class DesktopVoiceInputTests: XCTestCase {
         XCTAssertEqual(buffer.duration, 0)
     }
 
+    func testAudioSendQueuePreservesOrderAndTracksDuration() {
+        var queue = AudioSendQueue()
+
+        queue.append(makeAudioChunk(duration: 0.1, level: 0.1))
+        queue.append(makeAudioChunk(duration: 0.2, level: 0.2))
+
+        XCTAssertEqual(queue.count, 2)
+        XCTAssertEqual(queue.duration, 0.3, accuracy: 0.001)
+        XCTAssertEqual(queue.popFirst()?.audioLevel, 0.1)
+        XCTAssertEqual(queue.popFirst()?.audioLevel, 0.2)
+        XCTAssertTrue(queue.isEmpty)
+        XCTAssertEqual(queue.duration, 0, accuracy: 0.001)
+    }
+
     private func makeAudioChunk(duration: TimeInterval, level: Float) -> AudioChunk {
         let sampleRate = 16_000.0
         let frameCount = AVAudioFrameCount(duration * sampleRate)
