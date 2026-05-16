@@ -1,16 +1,18 @@
-# Agent Instructions
+# Agent Instructions (macOS)
 
-This repository is frequently edited by multiple AI coding tools. Treat these files as shared project context.
+This is the macOS subtree of the GuGuTalk monorepo. **Read the repo-root [`../AGENTS.md`](../AGENTS.md) first** — it covers the cross-platform structure and shared conventions.
+
+All commands below assume your working directory is `macos/` (i.e. `cd macos` from the repo root before running them).
 
 ## Start Here
 
 Before making changes, read:
 
-- `PRODUCT.md`
-- `DESIGN.md`
-- `MEMORY.md`
-- `HANDOFF.md`
-- `README.md`
+- `../PRODUCT.md` — product definition (shared across platforms)
+- `../DESIGN.md` — design system (shared across platforms)
+- `MEMORY.md` — durable macOS project facts
+- `HANDOFF.md` — current macOS development state
+- `../README.md` — project overview
 
 Then inspect the relevant source files before proposing or editing code.
 
@@ -23,6 +25,7 @@ Then inspect the relevant source files before proposing or editing code.
 - Keep UI calm, compact, and restrained. Avoid flashy AI aesthetics, web dashboard styling, game-like panels, and decorative gradients.
 - Update `HANDOFF.md` when the current state, next step, or known risks change.
 - Update `MEMORY.md` when a durable project fact changes.
+- **Stay inside `macos/`.** If you find yourself wanting to touch `windows/` or root-level shared docs, see the cross-cutting rules in `../AGENTS.md`.
 
 ## Build And Verification
 

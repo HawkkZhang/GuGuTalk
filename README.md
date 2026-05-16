@@ -41,6 +41,16 @@ dotnet run --project src/GuGuTalk.App
 - [PRODUCT.md](PRODUCT.md) — 产品定义
 - [DESIGN.md](DESIGN.md) — 设计系统
 
+## 给 AI 编码工具
+
+如果你是 AI 编码工具（Claude Code / Codex / Copilot 等），先读：
+
+- [AGENTS.md](AGENTS.md) — 仓库总规范（**必读**）
+- [macos/AGENTS.md](macos/AGENTS.md) — Mac 专用规范
+- [windows/AGENTS.md](windows/AGENTS.md) — Windows 专用规范
+
+里面有目录结构、改动边界、commit 规范和协议同步规则。
+
 ## 开源协议
 
 MIT License
