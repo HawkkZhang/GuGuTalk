@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- GuGuTalk Aqua Chick brand mark (placeholder) -->
+  <circle cx="128" cy="128" r="120" fill="#29B8C7"/>
+  <circle cx="128" cy="128" r="100" fill="#D4F7FA"/>
+  <!-- Microphone body -->
+  <rect x="100" y="70" width="56" height="100" rx="28" fill="#0A7887"/>
+  <!-- Stand -->
+  <rect x="120" y="180" width="16" height="40" fill="#0A7887"/>
+  <rect x="92" y="216" width="72" height="12" rx="6" fill="#0A7887"/>
+  <!-- Beak / accent -->
+  <polygon points="128,90 140,100 128,110 116,100" fill="#F28C38"/>
+</svg>

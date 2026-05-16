@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GuGuTalk.LocalAsr</RootNamespace>
+    <ModelName>sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23</ModelName>
+    <ModelArchive>$(ModelName).tar.bz2</ModelArchive>
+    <ModelUrl>https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/$(ModelArchive)</ModelUrl>
+    <ModelCacheDir>$(MSBuildThisFileDirectory)..\..\.modelcache</ModelCacheDir>
+    <ModelOutputDir>$(MSBuildThisFileDirectory)bundled-models\$(ModelName)</ModelOutputDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GuGuTalk.Core\GuGuTalk.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="org.k2fsa.sherpa.onnx" />
+  </ItemGroup>
+
+  <!--
+    Model files are referenced from GuGuTalk.App.csproj directly (via <Content> +
+    BundledModelsDir property), so they end up in the App's output and publish
+    directories. We only download/extract them here.
+  -->
+
+  <Target Name="DownloadAsrModel"
+          BeforeTargets="BeforeBuild"
+          Condition="!Exists('$(ModelOutputDir)\tokens.txt')">
+    <Message Importance="high" Text="==> Downloading ASR model: $(ModelName)" />
+    <MakeDir Directories="$(ModelCacheDir)" />
+    <MakeDir Directories="$(MSBuildThisFileDirectory)bundled-models" />
+
+    <DownloadFile
+      SourceUrl="$(ModelUrl)"
+      DestinationFolder="$(ModelCacheDir)"
+      DestinationFileName="$(ModelArchive)"
+      Condition="!Exists('$(ModelCacheDir)\$(ModelArchive)')"
+      Retries="3" />
+
+    <Message Importance="high" Text="==> Extracting model to bundled-models\" />
+    <Exec Command="tar -xjf &quot;$(ModelCacheDir)\$(ModelArchive)&quot; -C &quot;$(MSBuildThisFileDirectory)bundled-models&quot;"
+          WorkingDirectory="$(MSBuildThisFileDirectory)" />
+
+    <Error Text="Model extraction failed: tokens.txt not found at $(ModelOutputDir)"
+           Condition="!Exists('$(ModelOutputDir)\tokens.txt')" />
+  </Target>
+
+  <Target Name="CleanBundledModels" AfterTargets="Clean">
+    <RemoveDir Directories="$(MSBuildThisFileDirectory)bundled-models" />
+  </Target>
+</Project>

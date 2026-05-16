@@ -1,13 +1,34 @@
+# OS
 .DS_Store
+Thumbs.db
+
+# macOS
+macos/.build/
+macos/Packages/
+macos/dist/dmg/*.dmg
+macos/dist/dmg/*.sha256
+macos/dist/dmg/*.app
+macos/dist/staging/
+macos/xcuserdata/
+macos/DerivedData/
+macos/.swiftpm/configuration/registries.json
+macos/.swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+
+# Windows (.NET)
+windows/bin/
+windows/obj/
+windows/**/bin/
+windows/**/obj/
+windows/.vs/
+windows/*.user
+windows/.modelcache/
+windows/src/GuGuTalk.LocalAsr/bundled-models/
+windows/installer/*.msi
+windows/installer/*.wixpdb
+
+# Shared
+.build/
 .agents/
-/.build
-/Packages
-/dist/dmg/*.dmg
-/dist/dmg/*.sha256
-/dist/dmg/*.app
-/dist/staging/
-xcuserdata/
-DerivedData/
-.swiftpm/configuration/registries.json
-.swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+.claude/
+**/xcuserdata/
 .netrc

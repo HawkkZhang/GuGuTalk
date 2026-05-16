@@ -1,0 +1,25 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Audio -->
+    <PackageVersion Include="NAudio" Version="2.2.1" />
+    <!-- MVVM -->
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <!-- System Tray -->
+    <PackageVersion Include="Hardcodet.NotifyIcon.Wpf" Version="1.1.0" />
+    <!-- UIAutomation -->
+    <PackageVersion Include="FlaUI.Core" Version="4.0.0" />
+    <PackageVersion Include="FlaUI.UIA3" Version="4.0.0" />
+    <!-- Local ASR -->
+    <PackageVersion Include="org.k2fsa.sherpa.onnx" Version="1.10.30" />
+    <!-- Logging -->
+    <PackageVersion Include="Serilog" Version="4.2.0" />
+    <PackageVersion Include="Serilog.Sinks.File" Version="6.0.0" />
+    <!-- Testing -->
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+  </ItemGroup>
+</Project>

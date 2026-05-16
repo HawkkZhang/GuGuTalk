@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>GuGuTalk.App</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <BundledModelsDir>$(MSBuildThisFileDirectory)..\GuGuTalk.LocalAsr\bundled-models</BundledModelsDir>
+  </PropertyGroup>
+  <ItemGroup Condition="Exists('Assets\app-icon.ico')">
+    <Content Include="Assets\app-icon.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  <PropertyGroup Condition="Exists('Assets\app-icon.ico')">
+    <ApplicationIcon>Assets\app-icon.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <!-- Bundle ASR model files into the app output directory (for both run and publish) -->
+  <ItemGroup Condition="Exists('$(BundledModelsDir)')">
+    <Content Include="$(BundledModelsDir)\**\*.onnx;$(BundledModelsDir)\**\tokens.txt">
+      <Link>models\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GuGuTalk.Core\GuGuTalk.Core.csproj" />
+    <ProjectReference Include="..\GuGuTalk.LocalAsr\GuGuTalk.LocalAsr.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Hardcodet.NotifyIcon.Wpf" />
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.Sinks.File" />
+  </ItemGroup>
+</Project>
